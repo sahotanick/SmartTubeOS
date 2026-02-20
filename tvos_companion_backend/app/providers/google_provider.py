@@ -419,11 +419,10 @@ class GoogleProvider(CompanionProvider):
         if page_token:
             params["pageToken"] = page_token
 
-        payload = self._youtube_get(
+        payload = self._youtube_get_with_public_fallback(
             path="commentThreads",
             params=params,
             account_id=selected,
-            auth_optional=True,
         )
 
         items = []
@@ -490,11 +489,10 @@ class GoogleProvider(CompanionProvider):
         if page_token:
             params["pageToken"] = page_token
 
-        payload = self._youtube_get(
+        payload = self._youtube_get_with_public_fallback(
             path="comments",
             params=params,
             account_id=selected,
-            auth_optional=True,
         )
 
         items = []
@@ -675,6 +673,34 @@ class GoogleProvider(CompanionProvider):
             raise ProviderError("GOOGLE_API_ERROR", message, status_code=502)
 
         return self._safe_json(response)
+
+    def _youtube_get_with_public_fallback(self, path: str, params: dict[str, Any], account_id: str | None) -> dict[str, Any]:
+        """
+        For some endpoints (notably comments), OAuth tokens can still be rejected with
+        scope-specific policy errors even when read-only scopes are present. Since these
+        reads are public with API key, retry via key to preserve V1 functionality.
+        """
+        try:
+            return self._youtube_get(
+                path=path,
+                params=params,
+                account_id=account_id,
+                auth_optional=True,
+            )
+        except ProviderError as exc:
+            if (
+                account_id
+                and self._settings.youtube_api_key
+                and exc.code == "GOOGLE_API_ERROR"
+                and "insufficient authentication scopes" in exc.message.lower()
+            ):
+                return self._youtube_get(
+                    path=path,
+                    params=params,
+                    account_id=None,
+                    auth_optional=True,
+                )
+            raise
 
     def _decode_continuation(self, token: str | None, expected_type: str) -> str | None:
         if not token:
@@ -940,22 +966,50 @@ class GoogleProvider(CompanionProvider):
             )
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        try:
-            with YoutubeDL(
-                {
-                    "quiet": True,
-                    "no_warnings": True,
-                    "skip_download": True,
-                    "noplaylist": True,
-                    "format": "best[ext=mp4]/best",
-                }
-            ) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-        except Exception as exc:  # noqa: BLE001
-            raise ProviderError("PLAYBACK_UNAVAILABLE", f"Could not resolve stream URL: {exc}", status_code=502) from exc
+        info: dict[str, Any] | None = None
+        last_error: Exception | None = None
+
+        # Try progressively looser format expressions for real-world availability.
+        for fmt in (
+            "best[acodec!=none][vcodec!=none]/best",
+            "best",
+            "b",
+        ):
+            try:
+                with YoutubeDL(
+                    {
+                        "quiet": True,
+                        "no_warnings": True,
+                        "skip_download": True,
+                        "noplaylist": True,
+                        "format": fmt,
+                    }
+                ) as ydl:
+                    info = ydl.extract_info(video_url, download=False)
+                if info:
+                    break
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                continue
+
+        if not info:
+            raise ProviderError(
+                "PLAYBACK_UNAVAILABLE",
+                f"Could not resolve stream URL: {last_error}",
+                status_code=502,
+            ) from last_error
 
         direct_url = info.get("url")
         ext = info.get("ext")
+        if not direct_url:
+            requested_formats = info.get("requested_formats") or []
+            for fmt in requested_formats:
+                candidate_url = fmt.get("url")
+                if candidate_url:
+                    direct_url = candidate_url
+                    ext = fmt.get("ext")
+                    break
+
         if not direct_url:
             formats = info.get("formats") or []
             for fmt in reversed(formats):

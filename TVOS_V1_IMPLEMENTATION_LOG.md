@@ -114,3 +114,44 @@ Move from planning artifacts to a testable V1 implementation for locked decision
 - Validation:
   - `pytest -q tests/test_google_provider.py` -> `6 passed`.
   - `pytest -q` -> `20 passed`.
+
+### 2026-02-20T16:10 Real Account Test (Google Provider) - In Progress
+- Environment wired via local `.env.local` (git-ignored) with Google OAuth/API credentials.
+- Companion started in `google` mode.
+- Verification:
+  - `/version` -> provider `google`
+  - `POST /v1/auth/start` -> `PENDING` with device code emitted
+  - `GET /v1/auth/poll` -> `PENDING` (awaiting browser authorization)
+- Next action required: User must complete device-code verification in browser.
+
+### 2026-02-20T16:12 Real Account Test Result: Authenticated Read Endpoints
+- Sign-in completed successfully with real Google account (`status=SIGNED_IN`).
+- Verified endpoints in `google` mode:
+  - `/v1/session` signed-in state and selected account id
+  - `/v1/accounts` includes Google profile
+  - `/v1/feed/home` returns populated feed
+  - `/v1/feed/subscriptions` returns populated feed
+  - `/v1/search?q=...` returns populated feed
+  - `/v1/video/{id}/metadata` returns description/comments key
+
+### 2026-02-20T16:12 Issue: Comments Scope Error Under OAuth
+- Issue: `/v1/comments` initially returned `GOOGLE_API_ERROR: Request had insufficient authentication scopes` despite read-only scopes present.
+- Decision/Fix: Added controlled fallback for comments/replies to API-key-backed public read when OAuth token gets scope-policy rejection.
+- Result: Comments and replies load successfully for real account test video.
+
+### 2026-02-20T16:15 Issue: Playback Extraction Failure on Real Video
+- Issue: `/v1/video/{id}/playback` failed on real subscription video with `Requested format is not available`.
+- Actions:
+  - Upgraded `yt-dlp` from `2025.1.26` to `2026.2.4`.
+  - Relaxed stream extraction strategy with progressive format fallback and requested-format URL handling.
+- Result: Playback endpoint now returns valid stream URL and `video/mp4` mime type for tested video.
+
+### 2026-02-20T16:16 Real Account Test Result: Full Core V1 Flow
+- Core authenticated flow validated end-to-end in `google` mode:
+  1. Device auth start/poll -> signed in
+  2. Account list/profile selected
+  3. Subscriptions feed loaded
+  4. Metadata + long description loaded
+  5. Comments page loaded
+  6. Replies page loaded
+  7. Playback URL resolved
