@@ -155,3 +155,7 @@ Move from planning artifacts to a testable V1 implementation for locked decision
   5. Comments page loaded
   6. Replies page loaded
   7. Playback URL resolved
+
+### 2026-02-20T16:18 History Check Post-Playback
+- Verified `/v1/feed/history` returns entries after playback call under google-mode local-history fallback.
+- Sample result during real test: count `1`.
