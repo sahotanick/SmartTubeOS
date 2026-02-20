@@ -1,0 +1,459 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0479A3EADC43D4CEC4CDE8AE /* SearchScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E05CC7679700E747D5DA2E /* SearchScreen.swift */; };
+		05AB9FE6832D0EFF50636D60 /* CommentsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C782D6BF07E3DA5B1515DD /* CommentsScreen.swift */; };
+		0EC57A2DDC6CED67B110AEBC /* VideoDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB6D027C4A6FA960C966479A /* VideoDetailScreen.swift */; };
+		12C8050471D0AF5C17FC11E0 /* FeedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB640D7C26493154374062D6 /* FeedScreen.swift */; };
+		30C777101CAED815420C3C4F /* URLProtocolMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DECB622A34DAEC2C39B849 /* URLProtocolMock.swift */; };
+		4C48667E564EC06875594DDF /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58F97335AB3AAC3BFE8EAA1 /* RootTabView.swift */; };
+		4EAB0EBF7B98316CD4B43597 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D62F4B3F3E776801E432DD7 /* APIClientTests.swift */; };
+		5806FBCCC0AEE2DCF65BE73B /* SmartTubeTVOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61BD761D0E4A07C884DF8A5 /* SmartTubeTVOSApp.swift */; };
+		720D610996EAB30DB8AF6EA4 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04711018E0AC40913A9C77F8 /* SettingsScreen.swift */; };
+		B3A21ECEFA35AFE704E73615 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E8653EFA5DFF7200C1E6C2D /* AppStateTests.swift */; };
+		C3C4F6694CF0C770B1C5974B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAECB39766C894D1A751474 /* Models.swift */; };
+		EE2232AA460386E4F94BDA9C /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03CE4237A3893FC38F77C4E0 /* AppState.swift */; };
+		FB95BD19F429A950E24B9EFF /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 452793F588031C427DC04A54 /* APIClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		FA1EF49E573479C2AE682243 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 570F117568EC723BCB5B791F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E5EFBDC260B88E3BE01D6E08;
+			remoteInfo = SmartTubeTVOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		03CE4237A3893FC38F77C4E0 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		04711018E0AC40913A9C77F8 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		0E8653EFA5DFF7200C1E6C2D /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		10E05CC7679700E747D5DA2E /* SearchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchScreen.swift; sourceTree = "<group>"; };
+		1D62F4B3F3E776801E432DD7 /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		3D1597B0E2890B58166B51B1 /* SmartTubeTVOSTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SmartTubeTVOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		44C782D6BF07E3DA5B1515DD /* CommentsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentsScreen.swift; sourceTree = "<group>"; };
+		452793F588031C427DC04A54 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		81A66CE3BE52828D63178442 /* SmartTubeTVOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SmartTubeTVOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A6DECB622A34DAEC2C39B849 /* URLProtocolMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolMock.swift; sourceTree = "<group>"; };
+		C61BD761D0E4A07C884DF8A5 /* SmartTubeTVOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartTubeTVOSApp.swift; sourceTree = "<group>"; };
+		D58F97335AB3AAC3BFE8EAA1 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		DFAECB39766C894D1A751474 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		FB640D7C26493154374062D6 /* FeedScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedScreen.swift; sourceTree = "<group>"; };
+		FB6D027C4A6FA960C966479A /* VideoDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDetailScreen.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1BAA7B14A045CF943555631A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				81A66CE3BE52828D63178442 /* SmartTubeTVOS.app */,
+				3D1597B0E2890B58166B51B1 /* SmartTubeTVOSTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3DC535640163170B03478280 /* SmartTubeTVOS */ = {
+			isa = PBXGroup;
+			children = (
+				EC021B603C13C3478BBFEAB2 /* App */,
+				D2AEFBE0268269E3D5C1BCE4 /* Core */,
+				CD6293C7C5D55D06216D6B95 /* Features */,
+			);
+			path = SmartTubeTVOS;
+			sourceTree = "<group>";
+		};
+		6EC1157F613B4CF57EBDB4CE /* SmartTubeTVOSTests */ = {
+			isa = PBXGroup;
+			children = (
+				1D62F4B3F3E776801E432DD7 /* APIClientTests.swift */,
+				0E8653EFA5DFF7200C1E6C2D /* AppStateTests.swift */,
+				A6DECB622A34DAEC2C39B849 /* URLProtocolMock.swift */,
+			);
+			path = SmartTubeTVOSTests;
+			sourceTree = "<group>";
+		};
+		9A3ED0979E6813723BBBE9F7 = {
+			isa = PBXGroup;
+			children = (
+				3DC535640163170B03478280 /* SmartTubeTVOS */,
+				6EC1157F613B4CF57EBDB4CE /* SmartTubeTVOSTests */,
+				1BAA7B14A045CF943555631A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CD6293C7C5D55D06216D6B95 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				44C782D6BF07E3DA5B1515DD /* CommentsScreen.swift */,
+				FB640D7C26493154374062D6 /* FeedScreen.swift */,
+				D58F97335AB3AAC3BFE8EAA1 /* RootTabView.swift */,
+				10E05CC7679700E747D5DA2E /* SearchScreen.swift */,
+				04711018E0AC40913A9C77F8 /* SettingsScreen.swift */,
+				FB6D027C4A6FA960C966479A /* VideoDetailScreen.swift */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		D2AEFBE0268269E3D5C1BCE4 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				452793F588031C427DC04A54 /* APIClient.swift */,
+				03CE4237A3893FC38F77C4E0 /* AppState.swift */,
+				DFAECB39766C894D1A751474 /* Models.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		EC021B603C13C3478BBFEAB2 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C61BD761D0E4A07C884DF8A5 /* SmartTubeTVOSApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B8FFCD4460B56ABFB6B331D9 /* SmartTubeTVOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CEF59EF075F4C5161E06CB4F /* Build configuration list for PBXNativeTarget "SmartTubeTVOSTests" */;
+			buildPhases = (
+				E2A8E81744EC4C7F33E14A7B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				76A733438F9B48534AEAAFA2 /* PBXTargetDependency */,
+			);
+			name = SmartTubeTVOSTests;
+			packageProductDependencies = (
+			);
+			productName = SmartTubeTVOSTests;
+			productReference = 3D1597B0E2890B58166B51B1 /* SmartTubeTVOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E5EFBDC260B88E3BE01D6E08 /* SmartTubeTVOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5791A3F3023BF82D6F989D3C /* Build configuration list for PBXNativeTarget "SmartTubeTVOS" */;
+			buildPhases = (
+				4C23C56CB88B1D37BDECF8A0 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SmartTubeTVOS;
+			packageProductDependencies = (
+			);
+			productName = SmartTubeTVOS;
+			productReference = 81A66CE3BE52828D63178442 /* SmartTubeTVOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		570F117568EC723BCB5B791F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = 25DA06E1E2B5AF1C9AAE7B03 /* Build configuration list for PBXProject "SmartTubeTVOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9A3ED0979E6813723BBBE9F7;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E5EFBDC260B88E3BE01D6E08 /* SmartTubeTVOS */,
+				B8FFCD4460B56ABFB6B331D9 /* SmartTubeTVOSTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4C23C56CB88B1D37BDECF8A0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB95BD19F429A950E24B9EFF /* APIClient.swift in Sources */,
+				EE2232AA460386E4F94BDA9C /* AppState.swift in Sources */,
+				05AB9FE6832D0EFF50636D60 /* CommentsScreen.swift in Sources */,
+				12C8050471D0AF5C17FC11E0 /* FeedScreen.swift in Sources */,
+				C3C4F6694CF0C770B1C5974B /* Models.swift in Sources */,
+				4C48667E564EC06875594DDF /* RootTabView.swift in Sources */,
+				0479A3EADC43D4CEC4CDE8AE /* SearchScreen.swift in Sources */,
+				720D610996EAB30DB8AF6EA4 /* SettingsScreen.swift in Sources */,
+				5806FBCCC0AEE2DCF65BE73B /* SmartTubeTVOSApp.swift in Sources */,
+				0EC57A2DDC6CED67B110AEBC /* VideoDetailScreen.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2A8E81744EC4C7F33E14A7B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4EAB0EBF7B98316CD4B43597 /* APIClientTests.swift in Sources */,
+				B3A21ECEFA35AFE704E73615 /* AppStateTests.swift in Sources */,
+				30C777101CAED815420C3C4F /* URLProtocolMock.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		76A733438F9B48534AEAAFA2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E5EFBDC260B88E3BE01D6E08 /* SmartTubeTVOS */;
+			targetProxy = FA1EF49E573479C2AE682243 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		13C38D43CC54EB0DCD7F0AB5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.1;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Release;
+		};
+		15E609E096B8A250CD39918D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.1;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
+		};
+		487B3D1120C1C160E6ACFCDE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "SmartTube TVOS";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.harnake.SmartTubeTVOS;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
+		};
+		514EAC408C6FE18D19AFDECC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.harnake.SmartTubeTVOSTests;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SmartTubeTVOS.app/SmartTubeTVOS";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
+		};
+		6B450B4D10A16C468F64C83A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "SmartTube TVOS";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.harnake.SmartTubeTVOS;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Release;
+		};
+		903FAF4F194C5BDD14301EE7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.harnake.SmartTubeTVOSTests;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SmartTubeTVOS.app/SmartTubeTVOS";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		25DA06E1E2B5AF1C9AAE7B03 /* Build configuration list for PBXProject "SmartTubeTVOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15E609E096B8A250CD39918D /* Debug */,
+				13C38D43CC54EB0DCD7F0AB5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5791A3F3023BF82D6F989D3C /* Build configuration list for PBXNativeTarget "SmartTubeTVOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				487B3D1120C1C160E6ACFCDE /* Debug */,
+				6B450B4D10A16C468F64C83A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CEF59EF075F4C5161E06CB4F /* Build configuration list for PBXNativeTarget "SmartTubeTVOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				514EAC408C6FE18D19AFDECC /* Debug */,
+				903FAF4F194C5BDD14301EE7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 570F117568EC723BCB5B791F /* Project object */;
+}

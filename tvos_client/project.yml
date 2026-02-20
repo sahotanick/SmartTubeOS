@@ -1,0 +1,38 @@
+name: SmartTubeTVOS
+options:
+  bundleIdPrefix: com.harnake
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    TVOS_DEPLOYMENT_TARGET: 17.0
+targets:
+  SmartTubeTVOS:
+    type: application
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: SmartTubeTVOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.harnake.SmartTubeTVOS
+        INFOPLIST_KEY_CFBundleDisplayName: SmartTube TVOS
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      testTargets:
+        - SmartTubeTVOSTests
+  SmartTubeTVOSTests:
+    type: bundle.unit-test
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: SmartTubeTVOSTests
+    dependencies:
+      - target: SmartTubeTVOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.harnake.SmartTubeTVOSTests
+        GENERATE_INFOPLIST_FILE: YES
