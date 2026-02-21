@@ -27,6 +27,8 @@ def test_playback_payload_shape(app_client):
     assert payload["videoId"] == "v_demo_001"
     assert payload["streamUrl"].startswith("https://")
     assert payload["mimeType"]
+    assert payload["availableStreams"]
+    assert payload["subtitleTracks"]
     assert payload["expiresAtEpochSec"] > 0
 
 

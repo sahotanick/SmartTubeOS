@@ -13,6 +13,18 @@ enum CompanionAPIError: Error, LocalizedError {
         case .invalidResponse:
             return "Unexpected companion response"
         case let .backend(code, message):
+            if code == "AUTH_REQUIRED" {
+                return "Sign in required. Open Profiles or Settings to add/select an account."
+            }
+            if code == "AUTH_EXPIRED" {
+                return "Your Google session expired. Sign in again from Profiles."
+            }
+            if code == "GOOGLE_API_ERROR", message.lowercased().contains("quota") {
+                return "YouTube API quota reached for today. Try again after reset, or switch to mock mode."
+            }
+            if code == "GOOGLE_API_KEY_REQUIRED" {
+                return "API key missing for signed-out mode. Add YOUTUBE_API_KEY in backend config."
+            }
             return "\(code): \(message)"
         case let .transport(message):
             return message
@@ -21,11 +33,13 @@ enum CompanionAPIError: Error, LocalizedError {
 }
 
 final class APIClient {
-    let baseURL: URL
+    private(set) var baseURL: URL
+    private let fallbackBaseURLs: [URL]
     private let session: URLSession
 
-    init(baseURL: URL, session: URLSession = .shared) {
+    init(baseURL: URL, fallbackBaseURLs: [URL] = [], session: URLSession = .shared) {
         self.baseURL = baseURL
+        self.fallbackBaseURLs = fallbackBaseURLs.filter { $0.absoluteString != baseURL.absoluteString }
         self.session = session
     }
 
@@ -54,8 +68,21 @@ final class APIClient {
         return try await request("/v1/accounts/select", method: "POST", body: payload)
     }
 
+    func removeAccount(accountId: String) async throws -> SelectAccountResponse {
+        let payload = RemoveAccountRequest(accountId: accountId)
+        return try await request("/v1/accounts/remove", method: "POST", body: payload)
+    }
+
+    func refreshAccounts() async throws -> RefreshAccountsResponse {
+        try await request("/v1/accounts/refresh", method: "POST")
+    }
+
     func fetchHome(continuationToken: String?) async throws -> FeedResponse {
         try await request("/v1/feed/home", method: "GET", query: ["continuationToken": continuationToken])
+    }
+
+    func fetchMusic(continuationToken: String?) async throws -> FeedResponse {
+        try await request("/v1/feed/music", method: "GET", query: ["continuationToken": continuationToken])
     }
 
     func fetchSubscriptions(continuationToken: String?) async throws -> FeedResponse {
@@ -70,12 +97,24 @@ final class APIClient {
         try await request("/v1/search", method: "GET", query: ["q": query, "continuationToken": continuationToken])
     }
 
+    func searchSuggestions(query: String) async throws -> SearchSuggestionsResponse {
+        try await request("/v1/search/suggestions", method: "GET", query: ["q": query])
+    }
+
     func fetchMetadata(videoId: String) async throws -> VideoMetadataResponse {
         try await request("/v1/video/\(videoId)/metadata", method: "GET")
     }
 
     func fetchPlayback(videoId: String) async throws -> PlaybackResponse {
         try await request("/v1/video/\(videoId)/playback", method: "GET")
+    }
+
+    func fetchRelated(videoId: String, continuationToken: String?) async throws -> FeedResponse {
+        try await request("/v1/video/\(videoId)/related", method: "GET", query: ["continuationToken": continuationToken])
+    }
+
+    func fetchChannelVideos(channelId: String, continuationToken: String?) async throws -> FeedResponse {
+        try await request("/v1/channel/\(channelId)/videos", method: "GET", query: ["continuationToken": continuationToken])
     }
 
     func fetchComments(commentsKey: String) async throws -> CommentsResponse {
@@ -94,6 +133,40 @@ final class APIClient {
         _ path: String,
         method: String,
         query: [String: String?] = [:],
+        body: B?
+    ) async throws -> T {
+        let candidates = [baseURL] + fallbackBaseURLs
+        var lastError: CompanionAPIError?
+
+        for candidate in candidates {
+            do {
+                let decoded: T = try await requestOnce(
+                    baseURL: candidate,
+                    path: path,
+                    method: method,
+                    query: query,
+                    body: body
+                )
+                if candidate.absoluteString != baseURL.absoluteString {
+                    baseURL = candidate
+                }
+                return decoded
+            } catch let error as CompanionAPIError {
+                lastError = error
+                if !shouldRetry(after: error) || candidate.absoluteString == candidates.last?.absoluteString {
+                    throw error
+                }
+            }
+        }
+
+        throw lastError ?? CompanionAPIError.transport("Could not connect to the server.")
+    }
+
+    private func requestOnce<T: Decodable, B: Encodable>(
+        baseURL: URL,
+        path: String,
+        method: String,
+        query: [String: String?],
         body: B?
     ) async throws -> T {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
@@ -128,6 +201,9 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            if let urlError = error as? URLError {
+                throw CompanionAPIError.transport("NETWORK_ERROR_\(urlError.code.rawValue): \(urlError.localizedDescription)")
+            }
             throw CompanionAPIError.transport(error.localizedDescription)
         }
 
@@ -147,5 +223,28 @@ final class APIClient {
         } catch {
             throw CompanionAPIError.transport("Could not decode response for \(path): \(error.localizedDescription)")
         }
+    }
+
+    private func shouldRetry(after error: CompanionAPIError) -> Bool {
+        guard case let .transport(message) = error else {
+            return false
+        }
+        if message.hasPrefix("NETWORK_ERROR_") {
+            return true
+        }
+        if message.hasPrefix("HTTP ") || message.hasPrefix("Could not decode response") {
+            return false
+        }
+        let lowered = message.lowercased()
+        let networkHints = [
+            "connect",
+            "connection",
+            "offline",
+            "timed out",
+            "cannot find host",
+            "could not resolve",
+            "network",
+        ]
+        return networkHints.contains(where: { lowered.contains($0) })
     }
 }

@@ -16,6 +16,10 @@ class SelectAccountRequest(BaseModel):
     accountId: str | None
 
 
+class RemoveAccountRequest(BaseModel):
+    accountId: str
+
+
 class CompanionApp:
     def __init__(self, settings: Settings | None = None, state_store: StateStore | None = None):
         self.settings = settings or Settings.from_env()
@@ -74,9 +78,21 @@ def create_app(settings: Settings | None = None, state_store: StateStore | None 
     def accounts_select(request: SelectAccountRequest) -> dict[str, Any]:
         return runtime.provider.select_account(request.accountId)
 
+    @app.post("/v1/accounts/remove")
+    def accounts_remove(request: RemoveAccountRequest) -> dict[str, Any]:
+        return runtime.provider.remove_account(request.accountId)
+
+    @app.post("/v1/accounts/refresh")
+    def accounts_refresh() -> dict[str, Any]:
+        return runtime.provider.refresh_accounts()
+
     @app.get("/v1/feed/home")
     def feed_home(continuationToken: str | None = None) -> dict[str, Any]:
         return runtime.provider.feed_home(continuationToken)
+
+    @app.get("/v1/feed/music")
+    def feed_music(continuationToken: str | None = None) -> dict[str, Any]:
+        return runtime.provider.feed_music(continuationToken)
 
     @app.get("/v1/feed/subscriptions")
     def feed_subscriptions(continuationToken: str | None = None) -> dict[str, Any]:
@@ -90,6 +106,10 @@ def create_app(settings: Settings | None = None, state_store: StateStore | None 
     def search(q: str = Query(..., min_length=1), continuationToken: str | None = None) -> dict[str, Any]:
         return runtime.provider.search(q, continuationToken)
 
+    @app.get("/v1/search/suggestions")
+    def search_suggestions(q: str = Query(..., min_length=1)) -> dict[str, Any]:
+        return runtime.provider.search_suggestions(q)
+
     @app.get("/v1/video/{video_id}/metadata")
     def video_metadata(video_id: str) -> dict[str, Any]:
         return runtime.provider.video_metadata(video_id)
@@ -97,6 +117,14 @@ def create_app(settings: Settings | None = None, state_store: StateStore | None 
     @app.get("/v1/video/{video_id}/playback")
     def video_playback(video_id: str) -> dict[str, Any]:
         return runtime.provider.video_playback(video_id)
+
+    @app.get("/v1/video/{video_id}/related")
+    def video_related(video_id: str, continuationToken: str | None = None) -> dict[str, Any]:
+        return runtime.provider.video_related(video_id, continuationToken)
+
+    @app.get("/v1/channel/{channel_id}/videos")
+    def channel_videos(channel_id: str, continuationToken: str | None = None) -> dict[str, Any]:
+        return runtime.provider.channel_videos(channel_id, continuationToken)
 
     @app.get("/v1/comments")
     def comments(commentsKey: str = Query(..., min_length=1)) -> dict[str, Any]:

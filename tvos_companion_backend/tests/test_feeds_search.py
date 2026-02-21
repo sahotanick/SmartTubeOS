@@ -36,6 +36,21 @@ def test_home_feed_pagination_and_continuation(app_client):
     assert second_payload["items"]
 
 
+def test_music_feed_pagination_and_continuation(app_client):
+    first = app_client.get("/v1/feed/music")
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["title"] == "Music"
+    assert first_payload["items"]
+
+    continuation = first_payload["continuationToken"]
+    if continuation:
+        second = app_client.get("/v1/feed/music", params={"continuationToken": continuation})
+        assert second.status_code == 200
+        second_payload = second.json()
+        assert second_payload["items"]
+
+
 def test_account_switch_updates_feed_context(app_client):
     first_account = _signin(app_client)
 
@@ -72,3 +87,25 @@ def test_search_rejects_invalid_continuation(app_client):
     response = app_client.get("/v1/search", params={"q": "tvOS", "continuationToken": "bad-token"})
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "INVALID_CONTINUATION"
+
+
+def test_related_channel_and_suggestions_endpoints(app_client):
+    related = app_client.get("/v1/video/v_demo_001/related")
+    assert related.status_code == 200
+    related_payload = related.json()
+    assert related_payload["title"] == "Up Next"
+    assert related_payload["items"]
+    assert all(row["videoId"] != "v_demo_001" for row in related_payload["items"])
+
+    channel_id = related_payload["items"][0]["channelId"]
+    channel_videos = app_client.get(f"/v1/channel/{channel_id}/videos")
+    assert channel_videos.status_code == 200
+    channel_payload = channel_videos.json()
+    assert channel_payload["items"]
+    assert all(row["channelId"] == channel_id for row in channel_payload["items"])
+
+    suggestions = app_client.get("/v1/search/suggestions", params={"q": "tv"})
+    assert suggestions.status_code == 200
+    suggestion_payload = suggestions.json()
+    assert suggestion_payload["query"] == "tv"
+    assert suggestion_payload["suggestions"]

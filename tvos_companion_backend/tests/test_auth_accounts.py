@@ -15,6 +15,8 @@ def test_auth_start_poll_signin_and_signout(app_client):
     assert start_payload["status"] == "PENDING"
     assert start_payload["signInCode"]
     assert start_payload["verificationUrl"].startswith("https://")
+    assert start_payload["verificationUrlComplete"].startswith("https://")
+    assert start_payload["signInCode"] in start_payload["verificationUrlComplete"]
 
     poll1 = app_client.get("/v1/auth/poll")
     assert poll1.status_code == 200
@@ -63,3 +65,38 @@ def test_select_unknown_account_returns_404(app_client):
     assert response.status_code == 404
     payload = response.json()
     assert payload["error"]["code"] == "ACCOUNT_NOT_FOUND"
+
+
+def test_remove_account_updates_selection(app_client):
+    select = app_client.post("/v1/accounts/select", json={"accountId": "acc_123"})
+    assert select.status_code == 200
+    assert select.json() == {"selectedAccountId": "acc_123"}
+
+    remove = app_client.post("/v1/accounts/remove", json={"accountId": "acc_123"})
+    assert remove.status_code == 200
+    assert remove.json()["selectedAccountId"] == "acc_456"
+
+    accounts_after = app_client.get("/v1/accounts")
+    assert accounts_after.status_code == 200
+    payload = accounts_after.json()
+    ids = {row["id"] for row in payload["accounts"]}
+    assert "acc_123" not in ids
+    assert payload["selectedAccountId"] == "acc_456"
+
+
+def test_remove_unknown_account_returns_404(app_client):
+    response = app_client.post("/v1/accounts/remove", json={"accountId": "acc_missing"})
+    assert response.status_code == 404
+    payload = response.json()
+    assert payload["error"]["code"] == "ACCOUNT_NOT_FOUND"
+
+
+def test_refresh_accounts_returns_profile_counts(app_client):
+    app_client.post("/v1/accounts/select", json={"accountId": "acc_123"})
+    response = app_client.post("/v1/accounts/refresh")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "REFRESHED"
+    assert payload["selectedAccountId"] == "acc_123"
+    assert payload["discoveredProfileCount"] >= 2
+    assert payload["totalProfileCount"] >= 2

@@ -96,6 +96,34 @@ HOME_FEED_SIGNED_IN = {
     ],
 }
 
+MUSIC_FEED_ANON = [
+    "v_demo_008",
+    "v_demo_009",
+    "v_demo_012",
+    "v_demo_003",
+    "v_demo_002",
+    "v_demo_006",
+]
+
+MUSIC_FEED_SIGNED_IN = {
+    "acc_123": [
+        "v_demo_008",
+        "v_demo_003",
+        "v_demo_002",
+        "v_demo_010",
+        "v_demo_009",
+        "v_demo_006",
+    ],
+    "acc_456": [
+        "v_demo_009",
+        "v_demo_012",
+        "v_demo_007",
+        "v_demo_005",
+        "v_demo_002",
+        "v_demo_008",
+    ],
+}
+
 
 SUBSCRIPTIONS_FEED = {
     "acc_123": [

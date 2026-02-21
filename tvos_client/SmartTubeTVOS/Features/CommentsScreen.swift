@@ -45,9 +45,16 @@ struct CommentsScreen: View {
                 }
 
                 if let errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
-                        .font(.footnote)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                            .font(.footnote)
+                        Button("Retry") {
+                            let key = nextKey ?? initialCommentsKey
+                            Task { await loadComments(commentsKey: key, append: nextKey != nil) }
+                        }
+                        .disabled(isLoading)
+                    }
                 }
             }
             .padding(24)

@@ -10,6 +10,8 @@ from app.mock_data import (
     HISTORY_FEED,
     HOME_FEED_ANON,
     HOME_FEED_SIGNED_IN,
+    MUSIC_FEED_ANON,
+    MUSIC_FEED_SIGNED_IN,
     PLAYBACK_DEFAULT,
     SUBSCRIPTIONS_FEED,
     VIDEO_BY_ID,
@@ -42,12 +44,15 @@ class MockProvider(CompanionProvider):
 
     def auth_start(self) -> dict[str, Any]:
         sign_in_code = f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}"
+        verification_url = "https://youtube.com/activate"
+        verification_url_complete = f"{verification_url}?user_code={sign_in_code}"
 
         def updater(state: dict[str, Any]) -> None:
             self._ensure_accounts(state)
             state["pendingAuth"] = {
                 "signInCode": sign_in_code,
-                "verificationUrl": "https://youtube.com/activate",
+                "verificationUrl": verification_url,
+                "verificationUrlComplete": verification_url_complete,
                 "expiresAtEpochSec": now_epoch() + 900,
                 "pollIntervalSec": 5,
                 "pollCount": 0,
@@ -59,7 +64,8 @@ class MockProvider(CompanionProvider):
         return {
             "status": "PENDING",
             "signInCode": sign_in_code,
-            "verificationUrl": "https://youtube.com/activate",
+            "verificationUrl": verification_url,
+            "verificationUrlComplete": verification_url_complete,
             "expiresInSec": 900,
             "pollIntervalSec": 5,
         }
@@ -121,6 +127,35 @@ class MockProvider(CompanionProvider):
         state = self._state_store.update(updater)
         return {"selectedAccountId": state.get("selectedAccountId")}
 
+    def remove_account(self, account_id: str) -> dict[str, Any]:
+        def updater(state: dict[str, Any]) -> None:
+            self._ensure_accounts(state)
+            accounts = state.get("accounts", [])
+            existing_ids = {row.get("id") for row in accounts}
+            if account_id not in existing_ids:
+                raise ProviderError("ACCOUNT_NOT_FOUND", f"Unknown account: {account_id}", status_code=404)
+
+            state["accounts"] = [row for row in accounts if row.get("id") != account_id]
+
+            if state.get("selectedAccountId") == account_id:
+                next_selected = state["accounts"][0]["id"] if state["accounts"] else None
+                state["selectedAccountId"] = next_selected
+
+        state = self._state_store.update(updater)
+        return {"selectedAccountId": state.get("selectedAccountId")}
+
+    def refresh_accounts(self) -> dict[str, Any]:
+        state = self._state_store.read()
+        self._ensure_accounts(state)
+        selected = state.get("selectedAccountId")
+        account_count = len(state.get("accounts", []))
+        return {
+            "status": "REFRESHED",
+            "selectedAccountId": selected,
+            "discoveredProfileCount": account_count,
+            "totalProfileCount": account_count,
+        }
+
     def feed_home(self, continuation_token: str | None) -> dict[str, Any]:
         state = self._state_store.read()
         selected = state.get("selectedAccountId")
@@ -135,6 +170,22 @@ class MockProvider(CompanionProvider):
             title=title,
             continuation_token=continuation_token,
             expected_kind="home",
+        )
+
+    def feed_music(self, continuation_token: str | None) -> dict[str, Any]:
+        state = self._state_store.read()
+        selected = state.get("selectedAccountId")
+        if selected and selected in MUSIC_FEED_SIGNED_IN:
+            ids = MUSIC_FEED_SIGNED_IN[selected]
+            expected_kind = f"music:{selected}"
+        else:
+            ids = MUSIC_FEED_ANON
+            expected_kind = "music"
+        return self._paginate_feed(
+            items=[feed_item(video_id) for video_id in ids],
+            title="Music",
+            continuation_token=continuation_token,
+            expected_kind=expected_kind,
         )
 
     def feed_subscriptions(self, continuation_token: str | None) -> dict[str, Any]:
@@ -170,6 +221,34 @@ class MockProvider(CompanionProvider):
             expected_kind=f"search:{query_lower}",
         )
 
+    def search_suggestions(self, query: str) -> dict[str, Any]:
+        cleaned = query.strip()
+        if not cleaned:
+            raise ProviderError("INVALID_QUERY", "q must not be empty", status_code=400)
+        query_lower = cleaned.lower()
+        suggestions: list[str] = []
+        seen: set[str] = set()
+        for video in VIDEOS:
+            candidates = [video.title, video.channel_name]
+            for candidate in candidates:
+                if query_lower not in candidate.lower():
+                    continue
+                normalized = candidate.strip()
+                if not normalized:
+                    continue
+                lowered = normalized.lower()
+                if lowered in seen:
+                    continue
+                seen.add(lowered)
+                suggestions.append(normalized)
+                if len(suggestions) >= 10:
+                    break
+            if len(suggestions) >= 10:
+                break
+        if not suggestions:
+            suggestions.append(cleaned)
+        return {"query": cleaned, "suggestions": suggestions}
+
     def video_metadata(self, video_id: str) -> dict[str, Any]:
         if video_id not in VIDEO_BY_ID:
             raise ProviderError("VIDEO_NOT_FOUND", f"Unknown video: {video_id}", status_code=404)
@@ -186,8 +265,67 @@ class MockProvider(CompanionProvider):
             "videoId": video_id,
             "streamUrl": PLAYBACK_DEFAULT["streamUrl"],
             "mimeType": PLAYBACK_DEFAULT["mimeType"],
+            "qualityLabel": "1080p",
+            "isAdaptive": False,
+            "availableStreams": [
+                {
+                    "id": "mock-1080p",
+                    "streamUrl": PLAYBACK_DEFAULT["streamUrl"],
+                    "mimeType": PLAYBACK_DEFAULT["mimeType"],
+                    "qualityLabel": "1080p",
+                    "isAdaptive": False,
+                },
+                {
+                    "id": "mock-720p",
+                    "streamUrl": PLAYBACK_DEFAULT["streamUrl"],
+                    "mimeType": PLAYBACK_DEFAULT["mimeType"],
+                    "qualityLabel": "720p",
+                    "isAdaptive": False,
+                },
+            ],
+            "subtitleTracks": [
+                {
+                    "id": "en",
+                    "language": "en",
+                    "label": "English",
+                    "url": "https://example.com/mock/en.vtt",
+                    "isAutoGenerated": False,
+                }
+            ],
             "expiresAtEpochSec": now_epoch() + 3600,
         }
+
+    def video_related(self, video_id: str, continuation_token: str | None) -> dict[str, Any]:
+        if video_id not in VIDEO_BY_ID:
+            raise ProviderError("VIDEO_NOT_FOUND", f"Unknown video: {video_id}", status_code=404)
+
+        current = VIDEO_BY_ID[video_id]
+        same_channel = [video for video in VIDEOS if video.channel_id == current.channel_id and video.video_id != video_id]
+        others = [video for video in VIDEOS if video.channel_id != current.channel_id and video.video_id != video_id]
+        ordered = same_channel + others
+
+        return self._paginate_feed(
+            items=[feed_item(video.video_id) for video in ordered],
+            title="Up Next",
+            continuation_token=continuation_token,
+            expected_kind=f"related:{video_id}",
+        )
+
+    def channel_videos(self, channel_id: str, continuation_token: str | None) -> dict[str, Any]:
+        cleaned = channel_id.strip()
+        if not cleaned:
+            raise ProviderError("CHANNEL_NOT_FOUND", "Channel id is empty", status_code=404)
+
+        matched = [video for video in VIDEOS if video.channel_id == cleaned]
+        if not matched:
+            raise ProviderError("CHANNEL_NOT_FOUND", f"Unknown channel: {cleaned}", status_code=404)
+
+        return self._paginate_feed(
+            items=[feed_item(video.video_id) for video in matched],
+            title=f"Channel: {matched[0].channel_name}",
+            continuation_token=continuation_token,
+            expected_kind=f"channel:{cleaned}",
+        )
 
     def comments(self, comments_key: str) -> dict[str, Any]:
         payload = self._decode_comment_cursor(comments_key, expected_type="comments")

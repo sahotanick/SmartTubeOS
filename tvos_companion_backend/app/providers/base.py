@@ -38,7 +38,19 @@ class CompanionProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def remove_account(self, account_id: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def refresh_accounts(self) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
     def feed_home(self, continuation_token: str | None) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def feed_music(self, continuation_token: str | None) -> dict[str, Any]:
         raise NotImplementedError
 
     @abstractmethod
@@ -54,11 +66,23 @@ class CompanionProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def search_suggestions(self, query: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
     def video_metadata(self, video_id: str) -> dict[str, Any]:
         raise NotImplementedError
 
     @abstractmethod
     def video_playback(self, video_id: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def video_related(self, video_id: str, continuation_token: str | None) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def channel_videos(self, channel_id: str, continuation_token: str | None) -> dict[str, Any]:
         raise NotImplementedError
 
     @abstractmethod
