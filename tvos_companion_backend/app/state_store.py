@@ -12,6 +12,7 @@ DEFAULT_STATE: dict[str, Any] = {
     "selectedAccountId": None,
     "pendingAuth": None,
     "localHistory": [],
+    "recommendationPreferences": {},
 }
 
 

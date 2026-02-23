@@ -109,3 +109,56 @@ def test_related_channel_and_suggestions_endpoints(app_client):
     suggestion_payload = suggestions.json()
     assert suggestion_payload["query"] == "tv"
     assert suggestion_payload["suggestions"]
+
+
+def test_recommendation_feedback_not_interested_filters_home(app_client):
+    initial = app_client.get("/v1/feed/home")
+    assert initial.status_code == 200
+    initial_items = initial.json()["items"]
+    assert initial_items
+    target = initial_items[0]
+
+    feedback = app_client.post(
+        "/v1/recommendations/feedback",
+        json={
+            "videoId": target["videoId"],
+            "channelId": target["channelId"],
+            "action": "NOT_INTERESTED",
+        },
+    )
+    assert feedback.status_code == 200
+    feedback_payload = feedback.json()
+    assert feedback_payload["status"] == "OK"
+    assert feedback_payload["action"] == "NOT_INTERESTED"
+
+    updated = app_client.get("/v1/feed/home")
+    assert updated.status_code == 200
+    updated_items = updated.json()["items"]
+    assert all(row["videoId"] != target["videoId"] for row in updated_items)
+
+
+def test_recommendation_feedback_block_channel_filters_home(app_client):
+    initial = app_client.get("/v1/feed/home")
+    assert initial.status_code == 200
+    initial_items = initial.json()["items"]
+    assert initial_items
+    channel_id = initial_items[0]["channelId"]
+    assert channel_id
+
+    feedback = app_client.post(
+        "/v1/recommendations/feedback",
+        json={
+            "videoId": initial_items[0]["videoId"],
+            "channelId": channel_id,
+            "action": "DONT_RECOMMEND_CHANNEL",
+        },
+    )
+    assert feedback.status_code == 200
+    feedback_payload = feedback.json()
+    assert feedback_payload["status"] == "OK"
+    assert feedback_payload["action"] == "DONT_RECOMMEND_CHANNEL"
+
+    updated = app_client.get("/v1/feed/home")
+    assert updated.status_code == 200
+    updated_items = updated.json()["items"]
+    assert all(row["channelId"] != channel_id for row in updated_items)

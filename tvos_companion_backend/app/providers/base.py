@@ -46,6 +46,10 @@ class CompanionProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def recommendation_feedback(self, video_id: str, channel_id: str | None, action: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
     def feed_home(self, continuation_token: str | None) -> dict[str, Any]:
         raise NotImplementedError
 

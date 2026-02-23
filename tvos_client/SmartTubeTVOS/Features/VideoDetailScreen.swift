@@ -25,6 +25,7 @@ struct VideoDetailScreen: View {
     @State private var autoNavigateRoute: VideoRoute?
     @State private var isLoading = false
     @State private var isLoadingRelated = false
+    @State private var feedbackInFlightVideoIds: Set<String> = []
     @State private var errorMessage: String?
 
     var body: some View {
@@ -82,6 +83,22 @@ struct VideoDetailScreen: View {
                             } label: {
                                 VideoRowView(item: item)
                             }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    Task { await sendRecommendationFeedback(for: item, action: .notInterested) }
+                                } label: {
+                                    Label("Not Interested", systemImage: "hand.thumbsdown")
+                                }
+
+                                if !item.channelId.isEmpty {
+                                    Button(role: .destructive) {
+                                        Task { await sendRecommendationFeedback(for: item, action: .dontRecommendChannel) }
+                                    } label: {
+                                        Label("Don't Recommend Channel", systemImage: "nosign")
+                                    }
+                                }
+                            }
+                            .disabled(feedbackInFlightVideoIds.contains(item.videoId))
                             .buttonStyle(.plain)
                         }
 
@@ -203,6 +220,30 @@ struct VideoDetailScreen: View {
         }
     }
 
+    private func sendRecommendationFeedback(for item: VideoFeedItem, action: VideoRecommendationFeedbackAction) async {
+        guard !feedbackInFlightVideoIds.contains(item.videoId) else { return }
+        feedbackInFlightVideoIds.insert(item.videoId)
+        defer {
+            feedbackInFlightVideoIds.remove(item.videoId)
+        }
+        do {
+            _ = try await appState.api.sendRecommendationFeedback(
+                videoId: item.videoId,
+                channelId: item.channelId.isEmpty ? nil : item.channelId,
+                action: action.rawValue
+            )
+            switch action {
+            case .notInterested:
+                relatedItems.removeAll { $0.videoId == item.videoId }
+            case .dontRecommendChannel:
+                relatedItems.removeAll { $0.channelId == item.channelId }
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private var playbackQueue: [PlaybackQueueItem] {
         if let queueContext, !queueContext.isEmpty {
             var queue: [PlaybackQueueItem] = []
@@ -268,6 +309,11 @@ struct VideoDetailScreen: View {
         }
         return "Playback: fixed stream (\(quality))"
     }
+}
+
+private enum VideoRecommendationFeedbackAction: String {
+    case notInterested = "NOT_INTERESTED"
+    case dontRecommendChannel = "DONT_RECOMMEND_CHANNEL"
 }
 
 private struct VideoRoute: Identifiable, Hashable {

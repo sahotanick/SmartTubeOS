@@ -77,6 +77,11 @@ final class APIClient {
         try await request("/v1/accounts/refresh", method: "POST")
     }
 
+    func sendRecommendationFeedback(videoId: String, channelId: String?, action: String) async throws -> RecommendationFeedbackResponse {
+        let payload = RecommendationFeedbackRequest(videoId: videoId, channelId: channelId, action: action)
+        return try await request("/v1/recommendations/feedback", method: "POST", body: payload)
+    }
+
     func fetchHome(continuationToken: String?) async throws -> FeedResponse {
         try await request("/v1/feed/home", method: "GET", query: ["continuationToken": continuationToken])
     }

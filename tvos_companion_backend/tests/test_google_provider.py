@@ -97,7 +97,7 @@ def test_google_select_unknown_account(tmp_path: Path):
     assert exc.value.code == "ACCOUNT_NOT_FOUND"
 
 
-def test_google_remove_account_updates_selection_and_history(tmp_path: Path):
+def test_google_remove_account_is_app_only_and_preserves_profile_data(tmp_path: Path):
     state_store = StateStore(tmp_path / "state.json")
     provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
 
@@ -149,7 +149,10 @@ def test_google_remove_account_updates_selection_and_history(tmp_path: Path):
     assert [row["id"] for row in accounts["accounts"]] == ["google_user-1_chan-2"]
 
     state = state_store.read()
-    assert all(row["accountId"] != "google_user-1" for row in state["localHistory"])
+    by_id = {str(row.get("id")): row for row in state.get("accounts", [])}
+    assert "google_user-1" in by_id
+    assert by_id["google_user-1"].get("appRemoved") is True
+    assert any(row["accountId"] == "google_user-1" for row in state["localHistory"])
 
 
 def test_google_remove_unknown_account_raises_404(tmp_path: Path):
@@ -159,6 +162,89 @@ def test_google_remove_unknown_account_raises_404(tmp_path: Path):
     with pytest.raises(ProviderError) as exc:
         provider.remove_account("google_missing")
     assert exc.value.code == "ACCOUNT_NOT_FOUND"
+
+
+def test_google_auth_poll_restores_previously_app_removed_profiles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    state_store = StateStore(tmp_path / "state.json")
+    provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
+
+    state_store.update(
+        lambda state: state.update(
+            {
+                "pendingAuth": {
+                    "provider": "google",
+                    "deviceCode": "device-code",
+                    "signInCode": "ABCD-EFGH",
+                    "verificationUrl": "https://youtube.com/activate",
+                    "expiresAtEpochSec": now_epoch() + 600,
+                    "pollIntervalSec": 5,
+                    "nextPollAtEpochSec": 0,
+                },
+                "accounts": [
+                    {
+                        "id": "google_user-1",
+                        "name": "Preet",
+                        "email": "john@example.com",
+                        "avatarUrl": None,
+                        "provider": "google",
+                        "ownerSub": "user-1",
+                        "channelId": "chan-1",
+                        "appRemoved": True,
+                        "tokens": {
+                            "accessToken": "old-token",
+                            "refreshToken": "refresh-old",
+                            "expiresAtEpochSec": now_epoch() + 100,
+                        },
+                    },
+                    {
+                        "id": "google_user-1_chan-2",
+                        "name": "Aamber",
+                        "email": "john@example.com",
+                        "avatarUrl": None,
+                        "provider": "google",
+                        "ownerSub": "user-1",
+                        "channelId": "chan-2",
+                        "tokens": {
+                            "accessToken": "old-token",
+                            "refreshToken": "refresh-old",
+                            "expiresAtEpochSec": now_epoch() + 100,
+                        },
+                    },
+                ],
+                "selectedAccountId": "google_user-1_chan-2",
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        provider,
+        "_poll_device_token",
+        lambda _: {
+            "status": "SUCCESS",
+            "access_token": "new-token",
+            "refresh_token": "new-refresh",
+            "expires_in": 3600,
+            "scope": "scope",
+        },
+    )
+    monkeypatch.setattr(
+        provider,
+        "_fetch_userinfo",
+        lambda _: {"sub": "user-1", "name": "John", "email": "john@example.com", "picture": "https://avatar"},
+    )
+    # Simulate partial channel discovery from Google. Previously app-removed profile
+    # should still be restored during explicit add-profile sign-in.
+    monkeypatch.setattr(
+        provider,
+        "_fetch_owned_channels",
+        lambda _: [{"id": "chan-2", "snippet": {"title": "Aamber", "thumbnails": {"high": {"url": "https://a"}}}}],
+    )
+
+    poll = provider.auth_poll()
+    assert poll["status"] == "SIGNED_IN"
+
+    accounts = provider.list_accounts()
+    assert {row["id"] for row in accounts["accounts"]} == {"google_user-1", "google_user-1_chan-2"}
 
 
 def test_google_refresh_accounts_preserves_existing_owner_profiles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -273,7 +359,7 @@ def test_google_auth_poll_maps_owned_channel_profiles(tmp_path: Path, monkeypatc
     )
     poll = provider.auth_poll()
     assert poll["status"] == "SIGNED_IN"
-    assert poll["selectedAccountId"] == "google_user-1"
+    assert poll["selectedAccountId"] == "google_user-1_chan-1"
 
     accounts = provider.list_accounts()
     assert len(accounts["accounts"]) == 3
@@ -1070,3 +1156,70 @@ def test_google_music_feed_personalized_and_popular_fallback(tmp_path: Path, mon
     monkeypatch.setattr(provider, "_youtube_get", popular_get)
     fallback = provider.feed_music(None)
     assert fallback["items"][0]["videoId"] == "p1"
+
+
+def test_google_recommendation_feedback_not_interested_persists_preferences(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    state_store = StateStore(tmp_path / "state.json")
+    provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
+
+    def fake_youtube_get(path: str, params: dict, account_id: str | None, auth_optional: bool) -> dict:
+        assert path == "videos"
+        return {
+            "items": [
+                {
+                    "id": "video-1",
+                    "snippet": {
+                        "title": "Football Highlights Premier League",
+                        "channelId": "chan-sports",
+                    },
+                }
+            ]
+        }
+
+    monkeypatch.setattr(provider, "_youtube_get", fake_youtube_get)
+
+    payload = provider.recommendation_feedback(
+        video_id="video-1",
+        channel_id=None,
+        action="NOT_INTERESTED",
+    )
+    assert payload["status"] == "OK"
+    assert payload["hiddenVideoCount"] == 1
+    assert payload["mutedTermCount"] >= 1
+
+    state = state_store.read()
+    prefs = state["recommendationPreferences"]["__anon__"]
+    assert "video-1" in prefs["hiddenVideoIds"]
+    assert "football" in {str(row).lower() for row in prefs["mutedTerms"]}
+
+
+def test_google_recommendation_feedback_block_channel_filters_items(tmp_path: Path):
+    state_store = StateStore(tmp_path / "state.json")
+    provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
+
+    payload = provider.recommendation_feedback(
+        video_id="video-2",
+        channel_id="chan-block",
+        action="DONT_RECOMMEND_CHANNEL",
+    )
+    assert payload["status"] == "OK"
+    assert payload["blockedChannelCount"] == 1
+
+    filtered = provider._apply_recommendation_filters(
+        items=[
+            {
+                "videoId": "video-a",
+                "title": "Blocked channel video",
+                "channelName": "Blocked",
+                "channelId": "chan-block",
+            },
+            {
+                "videoId": "video-b",
+                "title": "Allowed video",
+                "channelName": "Allowed",
+                "channelId": "chan-allow",
+            },
+        ],
+        account_id=None,
+    )
+    assert [row["videoId"] for row in filtered] == ["video-b"]

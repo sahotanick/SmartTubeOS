@@ -121,8 +121,6 @@ final class AppState: ObservableObject {
 
         do {
             _ = try await api.removeAccount(accountId: accountId)
-            watchProgressByAccount[accountId] = nil
-            persistWatchProgress()
             await refreshSessionAndAccounts()
         } catch {
             errorMessage = error.localizedDescription

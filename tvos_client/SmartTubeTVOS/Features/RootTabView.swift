@@ -264,7 +264,7 @@ private struct ProfileSwitcherSheet: View {
                     Task { await appState.removeAccount(account.id) }
                 }
             } message: {
-                Text("This removes the saved profile from this app.")
+                Text("This only removes the profile from this app view. It does not delete anything from Google.")
             }
         }
     }

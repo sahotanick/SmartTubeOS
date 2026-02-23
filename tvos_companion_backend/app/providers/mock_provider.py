@@ -156,6 +156,56 @@ class MockProvider(CompanionProvider):
             "totalProfileCount": account_count,
         }
 
+    def recommendation_feedback(self, video_id: str, channel_id: str | None, action: str) -> dict[str, Any]:
+        cleaned_video_id = video_id.strip()
+        cleaned_channel_id = (channel_id or "").strip()
+        normalized_action = action.strip().upper()
+        if normalized_action not in {"NOT_INTERESTED", "DONT_RECOMMEND_CHANNEL"}:
+            raise ProviderError("INVALID_ACTION", "Unsupported recommendation feedback action", status_code=400)
+        if normalized_action == "NOT_INTERESTED" and not cleaned_video_id:
+            raise ProviderError("INVALID_VIDEO_ID", "videoId is required for NOT_INTERESTED", status_code=400)
+        if not cleaned_channel_id and cleaned_video_id in VIDEO_BY_ID:
+            cleaned_channel_id = VIDEO_BY_ID[cleaned_video_id].channel_id
+        if normalized_action == "DONT_RECOMMEND_CHANNEL" and not cleaned_channel_id:
+            raise ProviderError("INVALID_CHANNEL_ID", "channelId is required for DONT_RECOMMEND_CHANNEL", status_code=400)
+
+        account_scope = self._recommendation_scope_account_id()
+
+        def updater(state: dict[str, Any]) -> None:
+            preferences = self._ensure_recommendation_preferences(state, account_scope)
+            if normalized_action == "NOT_INTERESTED":
+                hidden_ids = preferences.setdefault("hiddenVideoIds", [])
+                if cleaned_video_id and cleaned_video_id not in hidden_ids:
+                    hidden_ids.append(cleaned_video_id)
+                if cleaned_video_id in VIDEO_BY_ID:
+                    title = VIDEO_BY_ID[cleaned_video_id].title.lower()
+                    muted_terms = preferences.setdefault("mutedTerms", [])
+                    for term in self._tokenize_terms(title)[:5]:
+                        if term not in muted_terms:
+                            muted_terms.append(term)
+                    if len(muted_terms) > 200:
+                        del muted_terms[:-200]
+                if len(hidden_ids) > 500:
+                    del hidden_ids[:-500]
+            else:
+                blocked_channels = preferences.setdefault("blockedChannelIds", [])
+                if cleaned_channel_id not in blocked_channels:
+                    blocked_channels.append(cleaned_channel_id)
+                if len(blocked_channels) > 500:
+                    del blocked_channels[:-500]
+            preferences["updatedAtEpochSec"] = now_epoch()
+
+        state = self._state_store.update(updater)
+        prefs = self._get_recommendation_preferences(state, account_scope)
+        return {
+            "status": "OK",
+            "accountId": account_scope,
+            "action": normalized_action,
+            "hiddenVideoCount": len(prefs.get("hiddenVideoIds", [])),
+            "blockedChannelCount": len(prefs.get("blockedChannelIds", [])),
+            "mutedTermCount": len(prefs.get("mutedTerms", [])),
+        }
+
     def feed_home(self, continuation_token: str | None) -> dict[str, Any]:
         state = self._state_store.read()
         selected = state.get("selectedAccountId")
@@ -165,8 +215,11 @@ class MockProvider(CompanionProvider):
         else:
             ids = HOME_FEED_ANON
             title = "Home"
+        account_scope = selected if selected else "__anon__"
+        items = [feed_item(video_id) for video_id in ids]
+        items = self._filter_items_for_preferences(items, account_scope, state)
         return self._paginate_feed(
-            items=[feed_item(video_id) for video_id in ids],
+            items=items,
             title=title,
             continuation_token=continuation_token,
             expected_kind="home",
@@ -181,8 +234,11 @@ class MockProvider(CompanionProvider):
         else:
             ids = MUSIC_FEED_ANON
             expected_kind = "music"
+        account_scope = selected if selected else "__anon__"
+        items = [feed_item(video_id) for video_id in ids]
+        items = self._filter_items_for_preferences(items, account_scope, state)
         return self._paginate_feed(
-            items=[feed_item(video_id) for video_id in ids],
+            items=items,
             title="Music",
             continuation_token=continuation_token,
             expected_kind=expected_kind,
@@ -191,8 +247,11 @@ class MockProvider(CompanionProvider):
     def feed_subscriptions(self, continuation_token: str | None) -> dict[str, Any]:
         selected = self._require_selected_account()
         ids = SUBSCRIPTIONS_FEED.get(selected, [])
+        state = self._state_store.read()
+        items = [feed_item(video_id) for video_id in ids]
+        items = self._filter_items_for_preferences(items, selected, state)
         return self._paginate_feed(
-            items=[feed_item(video_id) for video_id in ids],
+            items=items,
             title="Subscriptions",
             continuation_token=continuation_token,
             expected_kind=f"subscriptions:{selected}",
@@ -213,7 +272,10 @@ class MockProvider(CompanionProvider):
             raise ProviderError("INVALID_QUERY", "q must not be empty", status_code=400)
         query_lower = query.strip().lower()
         matched = [video for video in VIDEOS if query_lower in video.title.lower() or query_lower in video.channel_name.lower()]
+        state = self._state_store.read()
+        account_scope = state.get("selectedAccountId") or "__anon__"
         items = [feed_item(video.video_id) for video in matched]
+        items = self._filter_items_for_preferences(items, account_scope, state)
         return self._paginate_feed(
             items=items,
             title=f"Search: {query.strip()}",
@@ -303,9 +365,13 @@ class MockProvider(CompanionProvider):
         same_channel = [video for video in VIDEOS if video.channel_id == current.channel_id and video.video_id != video_id]
         others = [video for video in VIDEOS if video.channel_id != current.channel_id and video.video_id != video_id]
         ordered = same_channel + others
+        state = self._state_store.read()
+        account_scope = state.get("selectedAccountId") or "__anon__"
+        items = [feed_item(video.video_id) for video in ordered]
+        items = self._filter_items_for_preferences(items, account_scope, state)
 
         return self._paginate_feed(
-            items=[feed_item(video.video_id) for video in ordered],
+            items=items,
             title="Up Next",
             continuation_token=continuation_token,
             expected_kind=f"related:{video_id}",
@@ -468,3 +534,113 @@ class MockProvider(CompanionProvider):
         if not selected:
             raise ProviderError("AUTH_REQUIRED", "Sign-in required", status_code=401)
         return selected
+
+    def _recommendation_scope_account_id(self) -> str:
+        state = self._state_store.read()
+        selected = state.get("selectedAccountId")
+        return str(selected) if selected else "__anon__"
+
+    def _ensure_recommendation_preferences(self, state: dict[str, Any], account_scope: str) -> dict[str, Any]:
+        root = state.setdefault("recommendationPreferences", {})
+        if not isinstance(root, dict):
+            root = {}
+            state["recommendationPreferences"] = root
+        prefs = root.get(account_scope)
+        if not isinstance(prefs, dict):
+            prefs = {
+                "hiddenVideoIds": [],
+                "blockedChannelIds": [],
+                "mutedTerms": [],
+                "updatedAtEpochSec": 0,
+            }
+            root[account_scope] = prefs
+        prefs.setdefault("hiddenVideoIds", [])
+        prefs.setdefault("blockedChannelIds", [])
+        prefs.setdefault("mutedTerms", [])
+        prefs.setdefault("updatedAtEpochSec", 0)
+        return prefs
+
+    def _get_recommendation_preferences(self, state: dict[str, Any], account_scope: str) -> dict[str, Any]:
+        root = state.get("recommendationPreferences", {})
+        if not isinstance(root, dict):
+            return {
+                "hiddenVideoIds": [],
+                "blockedChannelIds": [],
+                "mutedTerms": [],
+            }
+        prefs = root.get(account_scope, {})
+        if not isinstance(prefs, dict):
+            return {
+                "hiddenVideoIds": [],
+                "blockedChannelIds": [],
+                "mutedTerms": [],
+            }
+        return prefs
+
+    def _filter_items_for_preferences(
+        self,
+        items: list[dict[str, Any]],
+        account_scope: str,
+        state: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        if not items:
+            return items
+        if state is None:
+            state = self._state_store.read()
+        prefs = self._get_recommendation_preferences(state, account_scope)
+        hidden_video_ids = {str(row) for row in prefs.get("hiddenVideoIds", []) if row}
+        blocked_channel_ids = {str(row) for row in prefs.get("blockedChannelIds", []) if row}
+        muted_terms = {str(row).lower() for row in prefs.get("mutedTerms", []) if row}
+        if not hidden_video_ids and not blocked_channel_ids and not muted_terms:
+            return items
+        filtered: list[dict[str, Any]] = []
+        for item in items:
+            video_id = str(item.get("videoId") or "")
+            if video_id and video_id in hidden_video_ids:
+                continue
+            channel_id = str(item.get("channelId") or "")
+            if channel_id and channel_id in blocked_channel_ids:
+                continue
+            if muted_terms:
+                haystack = f"{item.get('title', '')} {item.get('channelName', '')}".lower()
+                item_terms = set(self._tokenize_terms(haystack))
+                if item_terms & muted_terms:
+                    continue
+            filtered.append(item)
+        return filtered
+
+    def _tokenize_terms(self, text: str) -> list[str]:
+        stopwords = {
+            "the",
+            "and",
+            "with",
+            "from",
+            "your",
+            "this",
+            "that",
+            "you",
+            "for",
+            "are",
+            "new",
+            "feat",
+            "official",
+            "video",
+            "music",
+        }
+        tokens: list[str] = []
+        current: list[str] = []
+        for char in text:
+            if char.isalnum():
+                current.append(char)
+                continue
+            if not current:
+                continue
+            token = "".join(current)
+            current = []
+            if len(token) >= 3 and token not in stopwords:
+                tokens.append(token)
+        if current:
+            token = "".join(current)
+            if len(token) >= 3 and token not in stopwords:
+                tokens.append(token)
+        return tokens

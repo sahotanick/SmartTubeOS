@@ -230,8 +230,13 @@ class GoogleProvider(CompanionProvider):
             if account_id not in visible_ids:
                 raise ProviderError("ACCOUNT_NOT_FOUND", f"Unknown account: {account_id}", status_code=404)
 
-            state["accounts"] = [row for row in state.get("accounts", []) if str(row.get("id")) != account_id]
-            state["localHistory"] = [row for row in state.get("localHistory", []) if str(row.get("accountId")) != account_id]
+            for row in state.get("accounts", []):
+                if str(row.get("id")) != account_id:
+                    continue
+                # App-only removal: never destroy Google-linked profile records.
+                row["appRemoved"] = True
+                row["appRemovedAtEpochSec"] = now_epoch()
+                break
 
             if state.get("selectedAccountId") == account_id:
                 visible_after = self._visible_accounts(state)
@@ -298,6 +303,76 @@ class GoogleProvider(CompanionProvider):
             "totalProfileCount": total_profiles,
         }
 
+    def recommendation_feedback(self, video_id: str, channel_id: str | None, action: str) -> dict[str, Any]:
+        cleaned_video_id = video_id.strip()
+        cleaned_channel_id = (channel_id or "").strip()
+        normalized_action = action.strip().upper()
+        if normalized_action not in {"NOT_INTERESTED", "DONT_RECOMMEND_CHANNEL"}:
+            raise ProviderError("INVALID_ACTION", "Unsupported recommendation feedback action", status_code=400)
+        if normalized_action == "NOT_INTERESTED" and not cleaned_video_id:
+            raise ProviderError("INVALID_VIDEO_ID", "videoId is required for NOT_INTERESTED", status_code=400)
+        selected = self._get_selected_account_id(required=False)
+        account_scope = self._recommendation_scope_id(selected)
+
+        title_for_terms = ""
+        if cleaned_video_id:
+            try:
+                payload = self._youtube_get(
+                    path="videos",
+                    params={
+                        "part": "snippet",
+                        "id": cleaned_video_id,
+                        "maxResults": 1,
+                    },
+                    account_id=selected,
+                    auth_optional=True,
+                )
+                rows = [row for row in payload.get("items", []) if isinstance(row, dict)]
+                if rows:
+                    snippet = rows[0].get("snippet", {})
+                    cleaned_channel_id = cleaned_channel_id or str(snippet.get("channelId") or "")
+                    title_for_terms = str(snippet.get("title") or "")
+            except ProviderError:
+                # Still persist direct feedback when metadata lookup fails.
+                title_for_terms = ""
+
+        if normalized_action == "DONT_RECOMMEND_CHANNEL" and not cleaned_channel_id:
+            raise ProviderError("INVALID_CHANNEL_ID", "channelId is required for DONT_RECOMMEND_CHANNEL", status_code=400)
+
+        def updater(state: dict[str, Any]) -> None:
+            prefs = self._ensure_recommendation_preferences(state, account_scope)
+            hidden_video_ids = prefs.setdefault("hiddenVideoIds", [])
+            blocked_channel_ids = prefs.setdefault("blockedChannelIds", [])
+            muted_terms = prefs.setdefault("mutedTerms", [])
+            if normalized_action == "NOT_INTERESTED":
+                if cleaned_video_id and cleaned_video_id not in hidden_video_ids:
+                    hidden_video_ids.append(cleaned_video_id)
+                if title_for_terms:
+                    for term in self._tokenize_terms(title_for_terms.lower())[:5]:
+                        if term not in muted_terms:
+                            muted_terms.append(term)
+                if len(hidden_video_ids) > 1000:
+                    del hidden_video_ids[:-1000]
+                if len(muted_terms) > 300:
+                    del muted_terms[:-300]
+            else:
+                if cleaned_channel_id and cleaned_channel_id not in blocked_channel_ids:
+                    blocked_channel_ids.append(cleaned_channel_id)
+                if len(blocked_channel_ids) > 1000:
+                    del blocked_channel_ids[:-1000]
+            prefs["updatedAtEpochSec"] = now_epoch()
+
+        state = self._state_store.update(updater)
+        prefs = self._recommendation_preferences_from_state(state, account_scope)
+        return {
+            "status": "OK",
+            "accountId": account_scope,
+            "action": normalized_action,
+            "hiddenVideoCount": len(prefs.get("hiddenVideoIds", [])),
+            "blockedChannelCount": len(prefs.get("blockedChannelIds", [])),
+            "mutedTermCount": len(prefs.get("mutedTerms", [])),
+        }
+
     def feed_home(self, continuation_token: str | None) -> dict[str, Any]:
         selected = self._get_selected_account_id(required=False)
         page_token = self._decode_continuation(continuation_token, expected_type="google_home")
@@ -321,6 +396,7 @@ class GoogleProvider(CompanionProvider):
         items = [self._feed_item_from_video_resource(item) for item in payload.get("items", [])]
         items = [item for item in items if item]
         items = self._rerank_with_local_history(items, selected)
+        items = self._apply_recommendation_filters(items, selected)
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_home", "pageToken": next_token}) if next_token else None
 
@@ -390,6 +466,7 @@ class GoogleProvider(CompanionProvider):
             payload = fallback_payload
 
         items = self._rerank_with_local_history_recency(items, selected)
+        items = self._apply_recommendation_filters(items, selected)
 
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_subscriptions", "pageToken": next_token}) if next_token else None
@@ -455,6 +532,7 @@ class GoogleProvider(CompanionProvider):
             if mapped:
                 items.append(mapped)
         items = self._rerank_with_local_history(items, selected)
+        items = self._apply_recommendation_filters(items, selected)
 
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_search", "pageToken": next_token}) if next_token else None
@@ -594,6 +672,7 @@ class GoogleProvider(CompanionProvider):
             if mapped and mapped.get("videoId") != video_id:
                 items.append(mapped)
         items = self._rerank_with_local_history(items, selected)
+        items = self._apply_recommendation_filters(items, selected)
 
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_related", "videoId": video_id, "pageToken": next_token}) if next_token else None
@@ -870,14 +949,15 @@ class GoogleProvider(CompanionProvider):
     ) -> list[dict[str, Any]]:
         account_rows: list[dict[str, Any]] = []
         if owned_channels:
-            for index, channel in enumerate(owned_channels):
+            for channel in owned_channels:
                 channel_id = channel.get("id")
                 if not channel_id:
                     continue
                 snippet = channel.get("snippet", {})
                 account_rows.append(
                     {
-                        "id": base_account_id if index == 0 else f"{base_account_id}_{channel_id}",
+                        # Use channel-stable ids so profile identity does not depend on API order.
+                        "id": f"{base_account_id}_{channel_id}",
                         "name": snippet.get("title") or user_info.get("name") or user_info.get("email") or "Google Account",
                         "email": user_info.get("email"),
                         "avatarUrl": self._thumbnail_url(snippet) or user_info.get("picture"),
@@ -939,9 +1019,11 @@ class GoogleProvider(CompanionProvider):
                 filtered.append(row)
 
             by_channel: dict[str, dict[str, Any]] = {}
+            discovered_keys: set[str] = set()
             for row in account_rows:
                 key = str(row.get("channelId") or "")
                 by_channel[key] = copy.deepcopy(row)
+                discovered_keys.add(key)
 
             for row in same_owner_rows:
                 if not self._is_google_account_row(row):
@@ -954,10 +1036,21 @@ class GoogleProvider(CompanionProvider):
 
             merged_owner_rows: list[dict[str, Any]] = []
             seen_ids: set[str] = set()
-            for row in by_channel.values():
+            for key, row in by_channel.items():
                 row_id = str(row.get("id") or "")
-                if not row_id or row_id in seen_ids:
-                    continue
+                if not row_id:
+                    row_id = f"google_{owner_sub}_{key}" if key else f"google_{owner_sub}"
+                    row["id"] = row_id
+                if row_id in seen_ids:
+                    # Repair legacy id collisions without dropping profile rows.
+                    fallback = f"google_{owner_sub}_{key}" if key else f"google_{owner_sub}"
+                    candidate = fallback
+                    suffix = 2
+                    while candidate in seen_ids:
+                        candidate = f"{fallback}_{suffix}"
+                        suffix += 1
+                    row_id = candidate
+                    row["id"] = row_id
                 seen_ids.add(row_id)
 
                 row["provider"] = "google"
@@ -971,6 +1064,13 @@ class GoogleProvider(CompanionProvider):
                 elif previous_refresh and not tokens.get("refreshToken"):
                     tokens["refreshToken"] = previous_refresh
                 row["tokens"] = tokens
+
+                # If account is discovered in this sign-in/refresh response, it must be visible.
+                # If user is explicitly adding a profile (clear_pending=True), restore hidden
+                # rows for this owner so previously app-removed profiles are available again.
+                if key in discovered_keys or clear_pending:
+                    row["appRemoved"] = False
+                    row.pop("appRemovedAtEpochSec", None)
                 merged_owner_rows.append(row)
 
             filtered.extend(merged_owner_rows)
@@ -1173,7 +1273,13 @@ class GoogleProvider(CompanionProvider):
         rows = state.get("accounts", [])
         if not isinstance(rows, list):
             return []
-        return [copy.deepcopy(row) for row in rows if isinstance(row, dict) and self._is_google_account_row(row)]
+        return [
+            copy.deepcopy(row)
+            for row in rows
+            if isinstance(row, dict)
+            and self._is_google_account_row(row)
+            and not bool(row.get("appRemoved"))
+        ]
 
     def _owner_sub_from_row(self, row: dict[str, Any]) -> str | None:
         owner_sub = row.get("ownerSub")
@@ -1439,7 +1545,28 @@ class GoogleProvider(CompanionProvider):
             return []
         rows = [item for item in payload.get("items", []) if isinstance(item, dict)]
         by_id = {str(row.get("id") or ""): row for row in rows}
-        return [by_id[video_id] for video_id in video_ids if video_id in by_id]
+        ordered_rows = [by_id[video_id] for video_id in video_ids if video_id in by_id]
+        prefs = self._recommendation_preferences(account_id)
+        hidden_video_ids = {str(row) for row in prefs.get("hiddenVideoIds", []) if row}
+        blocked_channel_ids = {str(row) for row in prefs.get("blockedChannelIds", []) if row}
+        muted_terms = {str(row).lower() for row in prefs.get("mutedTerms", []) if row}
+        if not hidden_video_ids and not blocked_channel_ids and not muted_terms:
+            return ordered_rows
+        filtered_rows: list[dict[str, Any]] = []
+        for row in ordered_rows:
+            row_video_id = str(row.get("id") or "")
+            if row_video_id and row_video_id in hidden_video_ids:
+                continue
+            snippet = row.get("snippet", {})
+            row_channel_id = str(snippet.get("channelId") or "")
+            if row_channel_id and row_channel_id in blocked_channel_ids:
+                continue
+            if muted_terms:
+                haystack = f"{snippet.get('title', '')} {snippet.get('channelTitle', '')}".lower()
+                if set(self._tokenize_terms(haystack)) & muted_terms:
+                    continue
+            filtered_rows.append(row)
+        return filtered_rows
 
     def _history_preference_terms(self, account_id: str) -> set[str]:
         rows = self._history_seed_rows(account_id)
@@ -1523,6 +1650,75 @@ class GoogleProvider(CompanionProvider):
             if len(token) >= 3 and token not in stopwords:
                 tokens.append(token)
         return tokens
+
+    def _recommendation_scope_id(self, account_id: str | None) -> str:
+        return str(account_id) if account_id else "__anon__"
+
+    def _ensure_recommendation_preferences(self, state: dict[str, Any], scope_id: str) -> dict[str, Any]:
+        root = state.setdefault("recommendationPreferences", {})
+        if not isinstance(root, dict):
+            root = {}
+            state["recommendationPreferences"] = root
+        prefs = root.get(scope_id)
+        if not isinstance(prefs, dict):
+            prefs = {
+                "hiddenVideoIds": [],
+                "blockedChannelIds": [],
+                "mutedTerms": [],
+                "updatedAtEpochSec": 0,
+            }
+            root[scope_id] = prefs
+        prefs.setdefault("hiddenVideoIds", [])
+        prefs.setdefault("blockedChannelIds", [])
+        prefs.setdefault("mutedTerms", [])
+        prefs.setdefault("updatedAtEpochSec", 0)
+        return prefs
+
+    def _recommendation_preferences_from_state(self, state: dict[str, Any], scope_id: str) -> dict[str, Any]:
+        root = state.get("recommendationPreferences", {})
+        if not isinstance(root, dict):
+            return {
+                "hiddenVideoIds": [],
+                "blockedChannelIds": [],
+                "mutedTerms": [],
+            }
+        prefs = root.get(scope_id, {})
+        if not isinstance(prefs, dict):
+            return {
+                "hiddenVideoIds": [],
+                "blockedChannelIds": [],
+                "mutedTerms": [],
+            }
+        return prefs
+
+    def _recommendation_preferences(self, account_id: str | None) -> dict[str, Any]:
+        state = self._state_store.read()
+        return self._recommendation_preferences_from_state(state, self._recommendation_scope_id(account_id))
+
+    def _apply_recommendation_filters(self, items: list[dict[str, Any]], account_id: str | None) -> list[dict[str, Any]]:
+        if not items:
+            return items
+        prefs = self._recommendation_preferences(account_id)
+        hidden_video_ids = {str(row) for row in prefs.get("hiddenVideoIds", []) if row}
+        blocked_channel_ids = {str(row) for row in prefs.get("blockedChannelIds", []) if row}
+        muted_terms = {str(row).lower() for row in prefs.get("mutedTerms", []) if row}
+        if not hidden_video_ids and not blocked_channel_ids and not muted_terms:
+            return items
+        filtered: list[dict[str, Any]] = []
+        for item in items:
+            video_id = str(item.get("videoId") or "")
+            if video_id and video_id in hidden_video_ids:
+                continue
+            channel_id = str(item.get("channelId") or "")
+            if channel_id and channel_id in blocked_channel_ids:
+                continue
+            if muted_terms:
+                haystack = f"{item.get('title', '')} {item.get('channelName', '')}".lower()
+                item_terms = set(self._tokenize_terms(haystack))
+                if item_terms & muted_terms:
+                    continue
+            filtered.append(item)
+        return filtered
 
     def _rerank_with_local_history(self, items: list[dict[str, Any]], account_id: str | None) -> list[dict[str, Any]]:
         if not account_id or not items:
@@ -1677,6 +1873,8 @@ class GoogleProvider(CompanionProvider):
                 if len(items) >= 20:
                     break
 
+        items = self._rerank_with_local_history(items, account_id)
+        items = self._apply_recommendation_filters(items, account_id)
         next_token = payload.get("nextPageToken")
         continuation = (
             encode_cursor({"type": "google_music_personalized", "pageToken": next_token}) if next_token else None
@@ -1696,6 +1894,7 @@ class GoogleProvider(CompanionProvider):
         items = [self._feed_item_from_video_resource(item) for item in popular_rows]
         items = [item for item in items if item]
         items = self._rerank_with_local_history(items, account_id)
+        items = self._apply_recommendation_filters(items, account_id)
         continuation = encode_cursor({"type": "google_music_popular", "pageToken": next_token}) if next_token else None
         return {
             "title": "Music",

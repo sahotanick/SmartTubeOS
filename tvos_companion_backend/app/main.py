@@ -20,6 +20,12 @@ class RemoveAccountRequest(BaseModel):
     accountId: str
 
 
+class RecommendationFeedbackRequest(BaseModel):
+    videoId: str
+    channelId: str | None = None
+    action: str
+
+
 class CompanionApp:
     def __init__(self, settings: Settings | None = None, state_store: StateStore | None = None):
         self.settings = settings or Settings.from_env()
@@ -88,6 +94,14 @@ def create_app(settings: Settings | None = None, state_store: StateStore | None 
     @app.post("/v1/accounts/refresh")
     def accounts_refresh() -> dict[str, Any]:
         return runtime.provider.refresh_accounts()
+
+    @app.post("/v1/recommendations/feedback")
+    def recommendations_feedback(request: RecommendationFeedbackRequest) -> dict[str, Any]:
+        return runtime.provider.recommendation_feedback(
+            video_id=request.videoId,
+            channel_id=request.channelId,
+            action=request.action,
+        )
 
     @app.get("/v1/feed/home")
     def feed_home(continuationToken: str | None = None) -> dict[str, Any]:

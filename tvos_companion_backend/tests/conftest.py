@@ -21,6 +21,7 @@ def app_client(tmp_path: Path) -> TestClient:
         youtube_api_key=None,
         youtube_region="US",
         request_timeout_sec=20,
+        debug_formats=False,
     )
     state_store = StateStore(state_file)
     app = create_app(settings=settings, state_store=state_store)

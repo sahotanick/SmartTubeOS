@@ -81,6 +81,21 @@ struct RefreshAccountsResponse: Codable {
     let totalProfileCount: Int
 }
 
+struct RecommendationFeedbackRequest: Codable {
+    let videoId: String
+    let channelId: String?
+    let action: String
+}
+
+struct RecommendationFeedbackResponse: Codable {
+    let status: String
+    let accountId: String
+    let action: String
+    let hiddenVideoCount: Int
+    let blockedChannelCount: Int
+    let mutedTermCount: Int
+}
+
 struct FeedResponse: Codable {
     let title: String
     let continuationToken: String?
