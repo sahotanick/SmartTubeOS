@@ -153,6 +153,7 @@
 			buildPhases = (
 				4C23C56CB88B1D37BDECF8A0 /* Sources */,
 				556E6181CF745CB2F5053B62 /* Resources */,
+				27EC5F53F80F8106C7E4CE2C /* Inject Companion Auto URL */,
 			);
 			buildRules = (
 			);
@@ -204,6 +205,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		27EC5F53F80F8106C7E4CE2C /* Inject Companion Auto URL */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Inject Companion Auto URL";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -x \"${SRCROOT}/scripts/inject_companion_auto_base_url.sh\" ]; then\n  \"${SRCROOT}/scripts/inject_companion_auto_base_url.sh\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nelse\n  echo \"Missing script: ${SRCROOT}/scripts/inject_companion_auto_base_url.sh\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4C23C56CB88B1D37BDECF8A0 /* Sources */ = {

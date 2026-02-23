@@ -21,9 +21,14 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    scheme:
-      testTargets:
-        - SmartTubeTVOSTests
+    postBuildScripts:
+      - name: Inject Companion Auto URL
+        script: |
+          if [ -x "${SRCROOT}/scripts/inject_companion_auto_base_url.sh" ]; then
+            "${SRCROOT}/scripts/inject_companion_auto_base_url.sh" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          else
+            echo "Missing script: ${SRCROOT}/scripts/inject_companion_auto_base_url.sh"
+          fi
   SmartTubeTVOSTests:
     type: bundle.unit-test
     platform: tvOS
@@ -36,3 +41,30 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.harnake.SmartTubeTVOSTests
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  SmartTubeTVOS:
+    build:
+      targets:
+        SmartTubeTVOS: all
+    run:
+      config: Debug
+      preActions:
+        - name: Start Companion Backend
+          settingsTarget: SmartTubeTVOS
+          script: |
+            if [ -x "${SRCROOT}/scripts/start_companion_backend.sh" ]; then
+              "${SRCROOT}/scripts/start_companion_backend.sh"
+            else
+              echo "Missing script: ${SRCROOT}/scripts/start_companion_backend.sh"
+            fi
+    test:
+      config: Debug
+      targets:
+        - SmartTubeTVOSTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

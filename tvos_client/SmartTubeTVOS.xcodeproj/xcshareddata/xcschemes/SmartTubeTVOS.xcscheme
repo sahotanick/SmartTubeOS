@@ -64,6 +64,24 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
+      <PreActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Start Companion Backend"
+               scriptText = "if [ -x &quot;${SRCROOT}/scripts/start_companion_backend.sh&quot; ]; then&#10;  &quot;${SRCROOT}/scripts/start_companion_backend.sh&quot;&#10;else&#10;  echo &quot;Missing script: ${SRCROOT}/scripts/start_companion_backend.sh&quot;&#10;fi&#10;">
+               <EnvironmentBuildable>
+                  <BuildableReference
+                     BuildableIdentifier = "primary"
+                     BlueprintIdentifier = "E5EFBDC260B88E3BE01D6E08"
+                     BuildableName = "SmartTubeTVOS.app"
+                     BlueprintName = "SmartTubeTVOS"
+                     ReferencedContainer = "container:SmartTubeTVOS.xcodeproj">
+                  </BuildableReference>
+               </EnvironmentBuildable>
+            </ActionContent>
+         </ExecutionAction>
+      </PreActions>
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference

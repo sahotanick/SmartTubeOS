@@ -38,7 +38,7 @@ enum AppConfig {
 #if targetEnvironment(simulator)
         return localhost
 #else
-        return autoBaseURL ?? configuredBaseURL ?? localhost
+        return configuredBaseURL ?? autoBaseURL ?? localhost
 #endif
     }()
 
