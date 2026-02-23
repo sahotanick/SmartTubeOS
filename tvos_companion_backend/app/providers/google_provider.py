@@ -1963,11 +1963,16 @@ class GoogleProvider(CompanionProvider):
         if not direct_url:
             raise ProviderError("PLAYBACK_UNAVAILABLE", "No playable stream URL found", status_code=502)
 
+        # Always initialize return fields so fallback paths (e.g. direct info["url"])
+        # never reference unbound locals.
+        quality_label = "auto"
+        is_adaptive = False
         if hls_url:
             mime_type = "application/x-mpegURL"
-            quality_label = "auto"
+            is_adaptive = True
         else:
             mime_type = self._mime_type_for_format(selected_format, fallback_ext=ext)
+            quality_label = self._quality_label_for_format(selected_format) or "auto"
             is_adaptive = bool(selected_format and self._is_adaptive_stream(selected_format))
         if self._settings.debug_formats and playable_formats:
             print(f"SMARTTUBE_DEBUG_FORMATS_SELECTED {video_id} {selected_format}", flush=True)

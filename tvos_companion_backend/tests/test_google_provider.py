@@ -20,6 +20,7 @@ def _settings(path: Path, client_id: str | None = "id", client_secret: str | Non
         youtube_api_key="api-key",
         youtube_region="US",
         request_timeout_sec=20,
+        debug_formats=False,
     )
 
 
