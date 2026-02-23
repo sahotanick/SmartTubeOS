@@ -544,6 +544,90 @@ def test_google_video_playback_appends_local_history(tmp_path: Path, monkeypatch
     assert state["localHistory"][-1]["videoId"] == "abc123"
 
 
+def test_google_stream_extraction_attempts_prioritize_default_clients(tmp_path: Path):
+    state_store = StateStore(tmp_path / "state.json")
+    provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
+
+    attempts = provider._stream_extraction_attempts()
+    assert attempts
+    assert "extractor_args" not in attempts[0]
+
+    forced_attempts = [row for row in attempts if row.get("extractor_args")]
+    assert forced_attempts
+    assert forced_attempts[0]["extractor_args"]["youtube"]["player_client"] == ["web", "ios", "android"]
+    assert forced_attempts[-1]["extractor_args"]["youtube"]["player_client"] == ["tv"]
+
+
+def test_google_extract_stream_falls_back_to_next_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    state_store = StateStore(tmp_path / "state.json")
+    provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
+
+    monkeypatch.setattr(
+        provider,
+        "_stream_extraction_attempts",
+        lambda: [
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "format": "best",
+            },
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "format": "b",
+                "extractor_args": {"youtube": {"player_client": ["web", "ios", "android"]}},
+            },
+        ],
+    )
+
+    calls: list[dict] = []
+
+    class FakeYDL:
+        def __init__(self, options: dict):
+            self._options = options
+            calls.append(options)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, _video_url: str, download: bool):
+            assert download is False
+            if self._options.get("format") == "best":
+                raise RuntimeError("Requested format is not available")
+            return {
+                "formats": [
+                    {
+                        "format_id": "22",
+                        "url": "https://stream.example/video.mp4",
+                        "ext": "mp4",
+                        "height": 720,
+                        "fps": 30,
+                        "tbr": 1200,
+                        "vcodec": "avc1.64001F",
+                        "acodec": "mp4a.40.2",
+                        "protocol": "https",
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("app.providers.google_provider.YoutubeDL", FakeYDL)
+
+    payload = provider._extract_stream("abc123")
+    assert payload["streamUrl"] == "https://stream.example/video.mp4"
+    assert payload["mimeType"] == "video/mp4"
+    assert payload["qualityLabel"] == "720p"
+    assert len(calls) == 2
+    assert "extractor_args" not in calls[0]
+    assert calls[1]["extractor_args"]["youtube"]["player_client"] == ["web", "ios", "android"]
+
+
 def test_google_history_local_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     state_store = StateStore(tmp_path / "state.json")
     provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
@@ -649,6 +733,70 @@ def test_google_history_local_continuation_token(tmp_path: Path, monkeypatch: py
     assert first["continuationToken"] is not None
     second = provider.feed_history(first["continuationToken"])
     assert second["items"]
+
+
+def test_google_history_is_scoped_to_selected_profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    state_store = StateStore(tmp_path / "state.json")
+    provider = GoogleProvider(settings=_settings(tmp_path / "state.json"), state_store=state_store)
+
+    state_store.update(
+        lambda state: state.update(
+            {
+                "accounts": [
+                    {
+                        "id": "google_user-1",
+                        "name": "Preet",
+                        "email": "preet@example.com",
+                        "provider": "google",
+                        "tokens": {
+                            "accessToken": "token-1",
+                            "refreshToken": "refresh-1",
+                            "expiresAtEpochSec": 9999999999,
+                        },
+                    },
+                    {
+                        "id": "google_user-2",
+                        "name": "Harnake",
+                        "email": "harnake@example.com",
+                        "provider": "google",
+                        "tokens": {
+                            "accessToken": "token-2",
+                            "refreshToken": "refresh-2",
+                            "expiresAtEpochSec": 9999999999,
+                        },
+                    },
+                ],
+                "selectedAccountId": "google_user-1",
+                "localHistory": [
+                    {"accountId": "google_user-1", "videoId": "preet-1", "playedAtEpochSec": 1001},
+                    {"accountId": "google_user-2", "videoId": "harnake-1", "playedAtEpochSec": 1002},
+                    {"accountId": "google_user-1", "videoId": "preet-2", "playedAtEpochSec": 1003},
+                ],
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        provider,
+        "_best_effort_video_stub",
+        lambda video_id: {
+            "videoId": video_id,
+            "title": video_id,
+            "channelName": "",
+            "channelId": "",
+            "thumbnailUrl": "",
+            "publishedText": "",
+            "durationSec": 0,
+        },
+    )
+    monkeypatch.setattr(provider, "_history_from_related_playlist", lambda *_: (_ for _ in ()).throw(AssertionError("remote history should not be used")))
+
+    history_preet = provider.feed_history(None)
+    assert [row["videoId"] for row in history_preet["items"]] == ["preet-2", "preet-1"]
+
+    provider.select_account("google_user-2")
+    history_harnake = provider.feed_history(None)
+    assert [row["videoId"] for row in history_harnake["items"]] == ["harnake-1"]
 
 
 def test_google_youtube_get_uses_response_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

@@ -18,30 +18,39 @@ struct FeedScreen: View {
                 Text("Sign in from Settings to access \(title).")
                     .font(.headline)
             } else {
-                if title == "Home", !appState.continueWatching.isEmpty {
-                    continueWatchingRail
-                }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if showsContinueWatching {
+                            continueWatchingRail
+                                .padding(.top, 8)
+                                .padding(.bottom, 18)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
 
-                if items.isEmpty && !isLoading {
-                    Text("No items available.")
-                        .font(.headline)
-                }
+                        if items.isEmpty && !isLoading {
+                            Text("No items available.")
+                                .font(.headline)
+                        } else {
+                            ForEach(items) { item in
+                                NavigationLink {
+                                    VideoDetailScreen(videoId: item.videoId, queueContext: items)
+                                } label: {
+                                    VideoRowView(item: item)
+                                }
+                            }
+                        }
 
-                List(items) { item in
-                    NavigationLink {
-                        VideoDetailScreen(videoId: item.videoId)
-                    } label: {
-                        VideoRowView(item: item)
-                    }
-                }
-
-                if let continuationToken {
-                    Button(isLoading ? "Loading..." : "Load More") {
-                        Task {
-                            await loadPage(continuation: continuationToken)
+                        if let continuationToken {
+                            Button(isLoading ? "Loading..." : "Load More") {
+                                Task {
+                                    await loadPage(continuation: continuationToken)
+                                }
+                            }
+                            .disabled(isLoading)
+                            .padding(.top, 12)
                         }
                     }
-                    .disabled(isLoading)
+                    .padding(.horizontal, 10)
                 }
             }
 
@@ -67,16 +76,35 @@ struct FeedScreen: View {
         }
     }
 
+    private var showsContinueWatching: Bool {
+        title == "Home" && !appState.continueWatching.isEmpty
+    }
+
+    private var continueWatchingQueue: [VideoFeedItem] {
+        appState.continueWatching.map { entry in
+            VideoFeedItem(
+                videoId: entry.videoId,
+                title: entry.title,
+                channelName: entry.channelName,
+                channelId: "",
+                thumbnailUrl: entry.thumbnailUrl,
+                publishedText: "",
+                publishedAtEpochSec: nil,
+                durationSec: Int(entry.durationSec)
+            )
+        }
+    }
+
     private var continueWatchingRail: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Continue Watching")
                 .font(.title3.bold())
 
             ScrollView(.horizontal) {
-                HStack(spacing: 16) {
+                HStack(spacing: 88) {
                     ForEach(appState.continueWatching) { entry in
                         NavigationLink {
-                            VideoDetailScreen(videoId: entry.videoId)
+                            VideoDetailScreen(videoId: entry.videoId, queueContext: continueWatchingQueue)
                         } label: {
                             ContinueWatchingCard(entry: entry)
                         }
@@ -103,6 +131,16 @@ struct FeedScreen: View {
                 items = response.items
             } else {
                 items.append(contentsOf: response.items)
+            }
+            if title == "Subscriptions" {
+                items.sort { (lhs, rhs) in
+                    let left = lhs.publishedAtEpochSec ?? 0
+                    let right = rhs.publishedAtEpochSec ?? 0
+                    if left == right {
+                        return lhs.title < rhs.title
+                    }
+                    return left > right
+                }
             }
             continuationToken = response.continuationToken
             errorMessage = nil
@@ -134,7 +172,8 @@ private struct ContinueWatchingCard: View {
 
             Text(entry.title)
                 .font(.headline)
-                .lineLimit(2)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 .frame(width: 300, alignment: .leading)
 
             Text(entry.channelName)

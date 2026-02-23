@@ -346,3 +346,38 @@ Move from planning artifacts to a testable V1 implementation for locked decision
   - Added optional regional popular backfill (`IN`) only when Punjabi-like preference signals exist and first-page results are sparse.
 - Validation:
   - Backend tests updated for liked-seed + fallback behavior and re-run to green.
+
+### 2026-02-21T01:44 Playback Reliability Fix (yt-dlp Client Fallback)
+- Issue observed: playback failed for some music videos with `PLAYBACK_UNAVAILABLE` and `Requested format is not available`.
+- Root cause:
+  - Stream extraction forced yt-dlp `player_client=["tv"]`, which frequently returned DRM/format-unavailable responses for otherwise watchable videos.
+- Actions:
+  - Refactored stream extraction to try default yt-dlp client behavior first (no forced client).
+  - Added fallback extraction attempts with web/mobile clients, keeping tv-client only as a last resort.
+  - Added tests to lock attempt ordering and fallback behavior.
+- Validation:
+  - Direct API check for failing example `MmDqhcc0OJM` now returns playable stream payload.
+  - Backend suite re-run: `39 passed`.
+
+### 2026-02-21T02:08 Profile-Isolated History + Launch Profile Gate
+- Request:
+  - prevent history leakage across profile switches.
+  - show a profile chooser first on app launch.
+  - add a top-left profile icon for in-session switching.
+- Actions:
+  - Backend history behavior updated to local per-account history only for Google mode, removing remote watch-history playlist mixing.
+  - Added backend regression test to ensure history items are scoped by selected profile.
+  - tvOS app state updated with launch-profile-gate lifecycle (`hasBootstrapped`, `launchProfileGateVisible`, launch selection flow).
+  - Added fullscreen launch selector UI ("Who’s Watching?") shown after bootstrap when profiles exist.
+  - Moved profile switch button to top-left as a circular avatar icon.
+  - Selecting another profile from switcher now closes switcher and reloads tab root via account-bound view identity.
+- Validation:
+  - Backend and tvOS tests updated to cover the new behavior.
+
+### 2026-02-21T02:12 Profile Launcher Visual Fix
+- Issue observed: top-left profile launcher could render oversized Google letter-avatar artwork (layout blowout in focus state).
+- Actions:
+  - Replaced top-left launcher visual with fixed-size SF Symbol profile icon (`person.crop.circle.fill`) and status dot.
+  - Hardened profile avatar rendering path to always enforce explicit frame + circular clipping even when remote avatar loads.
+- Validation:
+  - tvOS tests: `xcodebuild ... test` -> `TEST SUCCEEDED` (`11/11` tests).

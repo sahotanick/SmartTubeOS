@@ -31,7 +31,7 @@ struct SettingsScreen: View {
                 .font(.title3)
                 .bold()
             Text(appState.session.signedIn ? "Signed in" : "Signed out")
-            Text("Selected account: \(appState.session.selectedAccountId ?? "none")")
+            Text("Selected profile: \(appState.selectedAccount?.name ?? "none")")
                 .foregroundStyle(.secondary)
         }
     }
@@ -90,21 +90,15 @@ struct SettingsScreen: View {
             }
 
             ForEach(appState.accounts) { account in
-                HStack(spacing: 12) {
+                HStack(spacing: 20) {
                     Button {
                         Task { await appState.selectAccount(account.id) }
                     } label: {
                         HStack(spacing: 12) {
                             accountAvatar(account)
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(account.name)
-                                if let email = account.email {
-                                    Text(email)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                            Text(account.name)
+                                .lineLimit(1)
 
                             Spacer()
                             if account.selected {
@@ -115,12 +109,14 @@ struct SettingsScreen: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(account.selected || appState.isLoading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Button(role: .destructive) {
                         Task { await appState.removeAccount(account.id) }
                     } label: {
                         Image(systemName: "trash")
                     }
+                    .frame(width: 64, height: 56)
                     .disabled(appState.accounts.count <= 1 || appState.isLoading)
                 }
                 .padding(10)

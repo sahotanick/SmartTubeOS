@@ -38,8 +38,20 @@ struct RootTabView: View {
                 SettingsScreen()
             }
         }
+        .id(appState.session.selectedAccountId ?? "signed_out")
+        .overlay(alignment: .topLeading) {
+            if !showProfileSwitcher && !appState.launchProfileGateVisible {
+                profileQuickAccessButton
+                    .padding(.top, 58)
+                    .padding(.leading, 58)
+            }
+        }
         .fullScreenCover(isPresented: $showProfileSwitcher) {
             ProfileSwitcherSheet()
+                .environmentObject(appState)
+        }
+        .fullScreenCover(isPresented: launchProfileGateBinding) {
+            LaunchProfileGateView()
                 .environmentObject(appState)
         }
     }
@@ -47,11 +59,6 @@ struct RootTabView: View {
     private func tabNavigation<Content: View>(title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
         NavigationStack {
             content()
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        profileQuickAccessButton
-                    }
-                }
         }
         .tabItem { Label(title, systemImage: systemImage) }
     }
@@ -60,11 +67,46 @@ struct RootTabView: View {
         Button {
             showProfileSwitcher = true
         } label: {
-            ProfileToolbarBadge(account: appState.selectedAccount)
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .frame(width: 48, height: 48)
+                    .background(
+                        Circle()
+                            .fill(Color.black.opacity(0.45))
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                    )
+
+                Circle()
+                    .fill(appState.session.signedIn ? Color.green : Color.gray)
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.black.opacity(0.4), lineWidth: 1)
+                    )
+                    .offset(x: 2, y: 2)
+            }
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Profiles")
         .accessibilityHint("Open profile switcher")
+        .zIndex(2)
+    }
+
+    private var launchProfileGateBinding: Binding<Bool> {
+        Binding(
+            get: { appState.launchProfileGateVisible },
+            set: { isPresented in
+                if !isPresented {
+                    appState.dismissLaunchProfileGate()
+                }
+            }
+        )
     }
 }
 
@@ -76,117 +118,121 @@ private struct ProfileSwitcherSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switcherHeader
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
 
-                    if appState.accounts.isEmpty {
-                        Text("No profiles available")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        HStack(spacing: 12) {
-                            Button("Refresh Profiles from Google") {
-                                Task { await appState.refreshProfilesFromGoogle() }
-                            }
-                            .disabled(!appState.session.signedIn || appState.isLoading)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        switcherHeader
 
-                            Button("Add Profile") {
-                                Task { await appState.startSignIn() }
-                            }
-                            .disabled(appState.isLoading)
-                        }
-
-                        if let hint = appState.profileHintMessage {
-                            Text(hint)
-                                .font(.footnote)
+                        if appState.accounts.isEmpty {
+                            Text("No profiles available")
                                 .foregroundStyle(.secondary)
-                        }
+                        } else {
+                            HStack(spacing: 12) {
+                                Button("Refresh Profiles from Google") {
+                                    Task { await appState.refreshProfilesFromGoogle() }
+                                }
+                                .disabled(!appState.session.signedIn || appState.isLoading)
 
-                        ForEach(appState.accounts) { account in
-                            HStack(spacing: 16) {
-                                Button {
-                                    Task { await appState.selectAccount(account.id) }
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        ProfileAvatarBadge(account: account, size: 48)
+                                Button("Add Profile") {
+                                    Task { await appState.startSignIn() }
+                                }
+                                .disabled(appState.isLoading)
+                            }
 
-                                        VStack(alignment: .leading, spacing: 4) {
+                            if let hint = appState.profileHintMessage {
+                                Text(hint)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            ForEach(appState.accounts) { account in
+                                HStack(spacing: 20) {
+                                    Button {
+                                        Task {
+                                            await appState.selectAccount(account.id)
+                                            dismiss()
+                                        }
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            ProfileAvatarBadge(account: account, size: 48)
+
                                             Text(account.name)
-                                            if let email = account.email {
-                                                Text(email)
+                                                .lineLimit(1)
+
+                                            Spacer()
+
+                                            if account.selected {
+                                                Text("Current")
                                                     .font(.footnote)
-                                                    .foregroundStyle(.secondary)
+                                                    .foregroundStyle(.green)
                                             }
                                         }
-
-                                        Spacer()
-
-                                        if account.selected {
-                                            Text("Current")
-                                                .font(.footnote)
-                                                .foregroundStyle(.green)
-                                        }
+                                        .padding(12)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(account.selected ? Color.green.opacity(0.18) : Color.white.opacity(0.06))
+                                        )
                                     }
-                                    .padding(12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(account.selected ? Color.green.opacity(0.18) : Color.white.opacity(0.06))
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(account.selected || appState.isLoading)
+                                    .buttonStyle(.plain)
+                                    .disabled(account.selected || appState.isLoading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                                Button(role: .destructive) {
-                                    pendingRemoval = account
-                                } label: {
-                                    Image(systemName: "trash")
+                                    Button(role: .destructive) {
+                                        pendingRemoval = account
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .frame(width: 64, height: 56)
+                                    .disabled(appState.accounts.count <= 1 || appState.isLoading)
                                 }
-                                .disabled(appState.accounts.count <= 1 || appState.isLoading)
                             }
                         }
-                    }
 
-                    Divider()
+                        Divider()
 
-                    Button("Use Signed-Out Mode") {
-                        Task { await appState.selectAccount(nil) }
-                    }
-                    .disabled(!appState.session.signedIn || appState.isLoading)
+                        Button("Use Signed-Out Mode") {
+                            Task { await appState.selectAccount(nil) }
+                        }
+                        .disabled(!appState.session.signedIn || appState.isLoading)
 
-                    Divider()
+                        Divider()
 
-                    if let authStart = appState.authStart {
-                        Text("Authorize this profile")
-                            .font(.title3)
-                            .bold()
+                        if let authStart = appState.authStart {
+                            Text("Authorize this profile")
+                                .font(.title3)
+                                .bold()
 
-                        DeviceSignInGuide(authStart: authStart)
+                            DeviceSignInGuide(authStart: authStart)
 
-                        HStack(spacing: 12) {
-                            Button("Poll Sign-In") {
-                                Task { await appState.pollSignIn() }
+                            HStack(spacing: 12) {
+                                Button("Poll Sign-In") {
+                                    Task { await appState.pollSignIn() }
+                                }
+                                .disabled(appState.isLoading)
+
+                                Button("Restart") {
+                                    Task { await appState.startSignIn() }
+                                }
+                                .disabled(appState.isLoading)
                             }
-                            .disabled(appState.isLoading)
-
-                            Button("Restart") {
+                        } else {
+                            Button("Start Add Profile Sign-In") {
                                 Task { await appState.startSignIn() }
                             }
                             .disabled(appState.isLoading)
                         }
-                    } else {
-                        Button("Start Add Profile Sign-In") {
-                            Task { await appState.startSignIn() }
-                        }
-                        .disabled(appState.isLoading)
-                    }
 
-                    if let error = appState.errorMessage {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                        if let error = appState.errorMessage {
+                            Text(error)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
                     }
+                    .padding(40)
                 }
-                .padding(40)
             }
             .navigationTitle("Profiles")
             .toolbar {
@@ -237,29 +283,80 @@ private struct ProfileSwitcherSheet: View {
     }
 }
 
-private struct ProfileToolbarBadge: View {
-    let account: AccountSummary?
-    private static let clock: Date.FormatStyle = .dateTime.hour(.defaultDigits(amPM: .omitted)).minute()
+private struct LaunchProfileGateView: View {
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            HStack(spacing: 10) {
-                Text(context.date.formatted(Self.clock))
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.92))
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Who’s Watching?")
+                        .font(.system(size: 64, weight: .bold))
+                        .padding(.top, 30)
 
-                ProfileAvatarBadge(account: account, size: 36)
+                    if appState.accounts.isEmpty {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("No profiles are loaded yet.")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                            Button("Start Sign-In") {
+                                Task { await appState.startSignIn() }
+                            }
+                            .disabled(appState.isLoading)
+
+                            Button("Continue Signed-Out") {
+                                Task { await appState.selectLaunchAccount(nil) }
+                            }
+                            .disabled(appState.isLoading)
+                        }
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            ForEach(appState.accounts) { account in
+                                Button {
+                                    Task { await appState.selectLaunchAccount(account.id) }
+                                } label: {
+                                    HStack(spacing: 20) {
+                                        ProfileAvatarBadge(account: account, size: 88)
+
+                                        Text(account.name)
+                                            .font(.system(size: 44, weight: .semibold))
+
+                                        Spacer()
+
+                                        if account.selected {
+                                            Text("Current")
+                                                .font(.title3.bold())
+                                                .foregroundStyle(.green)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(20)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(account.selected ? Color.green.opacity(0.18) : Color.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(appState.isLoading)
+                            }
+                        }
+                    }
+
+                    if let message = appState.errorMessage {
+                        Text(message)
+                            .foregroundStyle(.red)
+                            .font(.footnote)
+                    }
+                }
+                .padding(.horizontal, 70)
+                .padding(.bottom, 40)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.black.opacity(0.45))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
-            )
+            .background(Color.black.opacity(0.85).ignoresSafeArea())
+            .task {
+                if !appState.hasBootstrapped {
+                    await appState.bootstrap()
+                }
+            }
         }
     }
 }
@@ -269,28 +366,31 @@ private struct ProfileAvatarBadge: View {
     let size: CGFloat
 
     var body: some View {
-        if
-            let avatar = account?.avatarUrl,
-            let url = URL(string: avatar),
-            !avatar.isEmpty
-        {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case let .success(image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    placeholder
+        ZStack {
+            placeholder
+
+            if
+                let avatar = account?.avatarUrl,
+                let url = URL(string: avatar),
+                !avatar.isEmpty
+            {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: size, height: size)
+                            .clipped()
+                    default:
+                        EmptyView()
+                    }
                 }
             }
-            .frame(width: size, height: size)
-            .clipped()
-            .clipShape(Circle())
-        } else {
-            placeholder
-                .frame(width: size, height: size)
         }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .contentShape(Circle())
     }
 
     private var placeholder: some View {

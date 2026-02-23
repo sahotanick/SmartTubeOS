@@ -15,6 +15,10 @@ struct SearchScreen: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 12) {
                 TextField("Search YouTube", text: $query)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        Task { await runSearch(reset: true) }
+                    }
                 Button("Search") {
                     Task { await runSearch(reset: true) }
                 }
@@ -29,7 +33,7 @@ struct SearchScreen: View {
 
             List(items) { item in
                 NavigationLink {
-                    VideoDetailScreen(videoId: item.videoId)
+                    VideoDetailScreen(videoId: item.videoId, queueContext: items)
                 } label: {
                     VideoRowView(item: item)
                 }
@@ -70,6 +74,7 @@ struct SearchScreen: View {
     private func runSearch(reset: Bool, continuation: String? = nil) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        collapseSuggestions()
 
         isLoading = true
         defer { isLoading = false }
@@ -149,5 +154,10 @@ struct SearchScreen: View {
                 suggestions = []
             }
         }
+    }
+
+    private func collapseSuggestions() {
+        suggestionTask?.cancel()
+        suggestions = []
     }
 }

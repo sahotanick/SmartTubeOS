@@ -6,6 +6,8 @@ final class AppState: ObservableObject {
     @Published private(set) var accounts: [AccountSummary] = []
     @Published private(set) var authStart: AuthStartResponse?
     @Published private(set) var isLoading = false
+    @Published private(set) var hasBootstrapped = false
+    @Published private(set) var launchProfileGateVisible = false
     @Published private(set) var recentSearches: [String] = []
     @Published private(set) var continueWatching: [WatchProgressEntry] = []
     @Published var errorMessage: String?
@@ -31,6 +33,8 @@ final class AppState: ObservableObject {
 
     func bootstrap() async {
         await refreshSessionAndAccounts()
+        hasBootstrapped = true
+        launchProfileGateVisible = !accounts.isEmpty
     }
 
     func refreshSessionAndAccounts() async {
@@ -97,15 +101,18 @@ final class AppState: ObservableObject {
     }
 
     func selectAccount(_ accountId: String?) async {
-        isLoading = true
-        defer { isLoading = false }
+        _ = await selectAccountInternal(accountId)
+    }
 
-        do {
-            _ = try await api.selectAccount(accountId: accountId)
-            await refreshSessionAndAccounts()
-        } catch {
-            errorMessage = error.localizedDescription
+    func selectLaunchAccount(_ accountId: String?) async {
+        let success = await selectAccountInternal(accountId)
+        if success {
+            launchProfileGateVisible = false
         }
+    }
+
+    func dismissLaunchProfileGate() {
+        launchProfileGateVisible = false
     }
 
     func removeAccount(_ accountId: String) async {
@@ -213,6 +220,11 @@ final class AppState: ObservableObject {
         updateContinueWatchingForSelectedAccount()
     }
 
+    func continueWatchingEntry(for videoId: String) -> WatchProgressEntry? {
+        guard let accountId = session.selectedAccountId else { return nil }
+        return (watchProgressByAccount[accountId] ?? []).first { $0.videoId == videoId }
+    }
+
     func removeContinueWatching(videoId: String) {
         guard let accountId = session.selectedAccountId else { return }
         var rows = watchProgressByAccount[accountId] ?? []
@@ -260,6 +272,21 @@ final class AppState: ObservableObject {
     private func persistWatchProgress() {
         if let encoded = try? JSONEncoder().encode(watchProgressByAccount) {
             defaults.set(encoded, forKey: watchProgressKey)
+        }
+    }
+
+    private func selectAccountInternal(_ accountId: String?) async -> Bool {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            _ = try await api.selectAccount(accountId: accountId)
+            await refreshSessionAndAccounts()
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 }

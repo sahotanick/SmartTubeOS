@@ -319,13 +319,15 @@ class GoogleProvider(CompanionProvider):
         )
 
         items = [self._feed_item_from_video_resource(item) for item in payload.get("items", [])]
+        items = [item for item in items if item]
+        items = self._rerank_with_local_history(items, selected)
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_home", "pageToken": next_token}) if next_token else None
 
         return {
             "title": "Home",
             "continuationToken": continuation,
-            "items": [item for item in items if item],
+            "items": items,
         }
 
     def feed_music(self, continuation_token: str | None) -> dict[str, Any]:
@@ -387,6 +389,8 @@ class GoogleProvider(CompanionProvider):
             fallback_payload, items = self._subscriptions_fallback(selected, page_token)
             payload = fallback_payload
 
+        items = self._rerank_with_local_history_recency(items, selected)
+
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_subscriptions", "pageToken": next_token}) if next_token else None
 
@@ -399,7 +403,6 @@ class GoogleProvider(CompanionProvider):
     def feed_history(self, continuation_token: str | None) -> dict[str, Any]:
         selected = self._get_selected_account_id(required=True)
 
-        playlist_token = None
         if continuation_token:
             try:
                 cursor = decode_cursor(continuation_token)
@@ -407,21 +410,20 @@ class GoogleProvider(CompanionProvider):
                 raise ProviderError("INVALID_CONTINUATION", "Invalid continuation token", status_code=400) from exc
 
             cursor_type = cursor.get("type")
-            if cursor_type == "google_history":
-                playlist_token = cursor.get("pageToken")
-            elif cursor_type == "google_history_local":
-                return self._history_from_local_store(selected, continuation_token)
-            else:
+            if cursor_type == "google_history_local":
+                response = self._history_from_local_store(selected, continuation_token)
+                response["items"] = self._rerank_with_local_history(response.get("items", []), selected)
+                return response
+            if cursor_type != "google_history":
                 raise ProviderError("INVALID_CONTINUATION", "Continuation token does not match endpoint", status_code=400)
+            # Legacy continuation from older remote-history mode: restart local history pagination.
+            response = self._history_from_local_store(selected, None)
+            response["items"] = self._rerank_with_local_history(response.get("items", []), selected)
+            return response
 
-        try:
-            remote = self._history_from_related_playlist(selected, playlist_token)
-            if remote is not None:
-                return remote
-        except ProviderError:
-            pass
-
-        return self._history_from_local_store(selected, continuation_token)
+        response = self._history_from_local_store(selected, None)
+        response["items"] = self._rerank_with_local_history(response.get("items", []), selected)
+        return response
 
     def search(self, query: str, continuation_token: str | None) -> dict[str, Any]:
         cleaned_query = query.strip()
@@ -452,6 +454,7 @@ class GoogleProvider(CompanionProvider):
             mapped = self._feed_item_from_search_resource(row)
             if mapped:
                 items.append(mapped)
+        items = self._rerank_with_local_history(items, selected)
 
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_search", "pageToken": next_token}) if next_token else None
@@ -590,6 +593,7 @@ class GoogleProvider(CompanionProvider):
             mapped = self._feed_item_from_search_resource(row)
             if mapped and mapped.get("videoId") != video_id:
                 items.append(mapped)
+        items = self._rerank_with_local_history(items, selected)
 
         next_token = payload.get("nextPageToken")
         continuation = encode_cursor({"type": "google_related", "videoId": video_id, "pageToken": next_token}) if next_token else None
@@ -1371,6 +1375,7 @@ class GoogleProvider(CompanionProvider):
                 "channelId": payload.get("channelId") or "",
                 "thumbnailUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
                 "publishedText": payload.get("publishedText") or "",
+                "publishedAtEpochSec": None,
                 "durationSec": 0,
             }
         except ProviderError:
@@ -1381,6 +1386,7 @@ class GoogleProvider(CompanionProvider):
                 "channelId": "",
                 "thumbnailUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
                 "publishedText": "",
+                "publishedAtEpochSec": None,
                 "durationSec": 0,
             }
 
@@ -1398,6 +1404,149 @@ class GoogleProvider(CompanionProvider):
 
         self._state_store.update(updater)
 
+    def _local_history_video_ids(self, account_id: str, limit: int = 50) -> list[str]:
+        state = self._state_store.read()
+        rows = [row for row in state.get("localHistory", []) if row.get("accountId") == account_id]
+        rows.sort(key=lambda row: row.get("playedAtEpochSec", 0), reverse=True)
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for row in rows:
+            video_id = row.get("videoId")
+            if not video_id or video_id in seen:
+                continue
+            seen.add(video_id)
+            ordered.append(video_id)
+            if len(ordered) >= limit:
+                break
+        return ordered
+
+    def _history_seed_rows(self, account_id: str, limit: int = 40) -> list[dict[str, Any]]:
+        video_ids = self._local_history_video_ids(account_id, limit=limit)
+        if not video_ids:
+            return []
+        try:
+            payload = self._youtube_get(
+                path="videos",
+                params={
+                    "part": "snippet,contentDetails",
+                    "id": ",".join(video_ids),
+                    "maxResults": min(len(video_ids), 50),
+                },
+                account_id=account_id,
+                auth_optional=True,
+            )
+        except ProviderError:
+            return []
+        rows = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        by_id = {str(row.get("id") or ""): row for row in rows}
+        return [by_id[video_id] for video_id in video_ids if video_id in by_id]
+
+    def _history_preference_terms(self, account_id: str) -> set[str]:
+        rows = self._history_seed_rows(account_id)
+        if not rows:
+            return set()
+        return self._music_preference_terms_from_rows(rows)
+
+    def _history_signal_weights(self, account_id: str) -> tuple[dict[str, int], dict[str, int]]:
+        rows = self._history_seed_rows(account_id)
+        if not rows:
+            return {}, {}
+        channel_weights: dict[str, int] = {}
+        term_weights: dict[str, int] = {}
+        for row in rows:
+            snippet = row.get("snippet", {})
+            channel_id = snippet.get("channelId")
+            if channel_id:
+                channel_weights[channel_id] = channel_weights.get(channel_id, 0) + 1
+            title = str(snippet.get("title") or "").lower()
+            for token in self._tokenize_terms(title):
+                term_weights[token] = term_weights.get(token, 0) + 1
+        return channel_weights, term_weights
+
+    def _rerank_with_local_history_recency(
+        self,
+        items: list[dict[str, Any]],
+        account_id: str | None,
+    ) -> list[dict[str, Any]]:
+        if not account_id or not items:
+            return items
+        channel_weights, term_weights = self._history_signal_weights(account_id)
+        if not channel_weights and not term_weights:
+            return items
+        scored: list[tuple[int, float, int, dict[str, Any]]] = []
+        for idx, item in enumerate(items):
+            recency = int(item.get("publishedAtEpochSec") or 0)
+            score = 0.0
+            channel_id = item.get("channelId") or ""
+            if channel_id in channel_weights:
+                score += 3.0 + min(channel_weights[channel_id], 3)
+            title = str(item.get("title") or "").lower()
+            if title:
+                for term, weight in term_weights.items():
+                    if term in title:
+                        score += min(weight, 3) * 0.6
+            scored.append((recency, score, idx, item))
+        scored.sort(key=lambda row: (-row[0], -row[1], row[2]))
+        return [item for _, _, _, item in scored]
+
+    def _tokenize_terms(self, text: str) -> list[str]:
+        stopwords = {
+            "the",
+            "and",
+            "with",
+            "from",
+            "your",
+            "this",
+            "that",
+            "you",
+            "for",
+            "are",
+            "new",
+            "feat",
+            "official",
+            "video",
+            "music",
+        }
+        tokens: list[str] = []
+        current: list[str] = []
+        for ch in text:
+            if ch.isalnum():
+                current.append(ch)
+            else:
+                if current:
+                    token = "".join(current)
+                    current = []
+                    if len(token) >= 3 and token not in stopwords:
+                        tokens.append(token)
+        if current:
+            token = "".join(current)
+            if len(token) >= 3 and token not in stopwords:
+                tokens.append(token)
+        return tokens
+
+    def _rerank_with_local_history(self, items: list[dict[str, Any]], account_id: str | None) -> list[dict[str, Any]]:
+        if not account_id or not items:
+            return items
+        channel_weights, term_weights = self._history_signal_weights(account_id)
+        if not channel_weights and not term_weights:
+            return items
+        scored: list[tuple[float, int, dict[str, Any]]] = []
+        for idx, item in enumerate(items):
+            score = 0.0
+            channel_id = item.get("channelId") or ""
+            if channel_id in channel_weights:
+                score += 3.0 + min(channel_weights[channel_id], 3)
+            title = str(item.get("title") or "").lower()
+            if title:
+                for term, weight in term_weights.items():
+                    if term in title:
+                        score += min(weight, 3) * 0.6
+            scored.append((score, idx, item))
+        if not scored or max(score for score, _, _ in scored) <= 0:
+            return items
+        scored.sort(key=lambda row: (-row[0], row[1]))
+        return [item for _, _, item in scored]
+
     def _feed_item_from_video_resource(self, row: dict[str, Any]) -> dict[str, Any] | None:
         video_id = row.get("id")
         snippet = row.get("snippet", {})
@@ -1410,6 +1559,7 @@ class GoogleProvider(CompanionProvider):
             "channelId": snippet.get("channelId") or "",
             "thumbnailUrl": self._thumbnail_url(snippet),
             "publishedText": self._published_text(snippet.get("publishedAt")),
+            "publishedAtEpochSec": self._published_epoch(snippet.get("publishedAt")),
             "durationSec": 0,
         }
 
@@ -1425,6 +1575,7 @@ class GoogleProvider(CompanionProvider):
             "channelId": snippet.get("channelId") or "",
             "thumbnailUrl": self._thumbnail_url(snippet),
             "publishedText": self._published_text(snippet.get("publishedAt")),
+            "publishedAtEpochSec": self._published_epoch(snippet.get("publishedAt")),
             "durationSec": 0,
         }
 
@@ -1446,6 +1597,7 @@ class GoogleProvider(CompanionProvider):
             "channelId": snippet.get("channelId") or "",
             "thumbnailUrl": self._thumbnail_url(snippet),
             "publishedText": self._published_text(snippet.get("publishedAt")),
+            "publishedAtEpochSec": self._published_epoch(snippet.get("publishedAt")),
             "durationSec": 0,
         }
 
@@ -1455,6 +1607,7 @@ class GoogleProvider(CompanionProvider):
         if not page_token:
             liked_rows = self._music_seed_rows_from_likes(account_id)
             preferred_terms = self._music_preference_terms_from_rows(liked_rows)
+            preferred_terms.update(self._history_preference_terms(account_id))
             candidate_rows.extend(liked_rows)
 
         params = {
@@ -1541,11 +1694,13 @@ class GoogleProvider(CompanionProvider):
             region_override=None,
         )
         items = [self._feed_item_from_video_resource(item) for item in popular_rows]
+        items = [item for item in items if item]
+        items = self._rerank_with_local_history(items, account_id)
         continuation = encode_cursor({"type": "google_music_popular", "pageToken": next_token}) if next_token else None
         return {
             "title": "Music",
             "continuationToken": continuation,
-            "items": [item for item in items if item],
+            "items": items,
         }
 
     def _music_popular_rows(
@@ -1756,6 +1911,9 @@ class GoogleProvider(CompanionProvider):
         return False
 
     def _extract_stream(self, video_id: str) -> dict[str, Any]:
+        if self._settings.debug_formats:
+            print(f"SMARTTUBE_DEBUG_FORMATS_START {video_id}", flush=True)
+            logger.setLevel(logging.INFO)
         if YoutubeDL is None:
             raise ProviderError(
                 "PLAYBACK_EXTRACTOR_MISSING",
@@ -1767,24 +1925,11 @@ class GoogleProvider(CompanionProvider):
         info: dict[str, Any] | None = None
         last_error: Exception | None = None
 
-        # Prefer adaptive/modern formats first, then progressively looser fallbacks.
-        for fmt in (
-            "bestvideo*+bestaudio/best",
-            "best[height>=1080][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]/best",
-            "best",
-            "b",
-        ):
+        # Try default extractor behavior first (most reliable for non-DRM watchable URLs),
+        # then alternate client stacks as fallbacks for edge cases.
+        for ydl_opts in self._stream_extraction_attempts():
             try:
-                with YoutubeDL(
-                    {
-                        "quiet": True,
-                        "no_warnings": True,
-                        "skip_download": True,
-                        "noplaylist": True,
-                        "format": fmt,
-                        "extractor_args": {"youtube": {"player_client": ["tv"]}},
-                    }
-                ) as ydl:
+                with YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(video_url, download=False)
                 if info:
                     break
@@ -1811,16 +1956,48 @@ class GoogleProvider(CompanionProvider):
         if playable_formats:
             selected_format = max(playable_formats, key=self._playback_format_rank)
 
-        direct_url = (selected_format or {}).get("url") or info.get("url")
+        hls_url = info.get("hlsManifestUrl") or info.get("hls_url")
+        direct_url = hls_url or (selected_format or {}).get("url") or info.get("url")
         ext = (selected_format or {}).get("ext") or info.get("ext")
 
         if not direct_url:
             raise ProviderError("PLAYBACK_UNAVAILABLE", "No playable stream URL found", status_code=502)
 
-        mime_type = self._mime_type_for_format(selected_format, fallback_ext=ext)
-        quality_label = self._quality_label_for_format(selected_format)
+        if hls_url:
+            mime_type = "application/x-mpegURL"
+            quality_label = "auto"
+        else:
+            mime_type = self._mime_type_for_format(selected_format, fallback_ext=ext)
+            is_adaptive = bool(selected_format and self._is_adaptive_stream(selected_format))
+        if self._settings.debug_formats and playable_formats:
+            print(f"SMARTTUBE_DEBUG_FORMATS_SELECTED {video_id} {selected_format}", flush=True)
+            sample = []
+            for row in playable_formats[:12]:
+                sample.append({
+                    "id": row.get("format_id"),
+                    "ext": row.get("ext"),
+                    "height": row.get("height"),
+                    "width": row.get("width"),
+                    "vcodec": row.get("vcodec"),
+                    "acodec": row.get("acodec"),
+                    "fps": row.get("fps"),
+                    "tbr": row.get("tbr"),
+                    "format_note": row.get("format_note"),
+                    "url": "present" if row.get("url") else "missing",
+                })
+            print(f"SMARTTUBE_DEBUG_FORMATS_SAMPLE {video_id} {sample}", flush=True)
+            logger.info("SMARTTUBE_DEBUG_FORMATS %s", {"videoId": video_id, "selected": {
+                "id": (selected_format or {}).get("format_id"),
+                "ext": (selected_format or {}).get("ext"),
+                "height": (selected_format or {}).get("height"),
+                "width": (selected_format or {}).get("width"),
+                "vcodec": (selected_format or {}).get("vcodec"),
+                "acodec": (selected_format or {}).get("acodec"),
+                "format_note": (selected_format or {}).get("format_note"),
+            }, "sample": sample})
 
-        is_adaptive = bool(selected_format and self._is_adaptive_stream(selected_format))
+        if self._settings.debug_formats:
+            print(f"SMARTTUBE_DEBUG_FORMATS_DONE {video_id}", flush=True)
         return {
             "streamUrl": direct_url,
             "mimeType": mime_type,
@@ -1829,6 +2006,44 @@ class GoogleProvider(CompanionProvider):
             "availableStreams": available_streams,
             "subtitleTracks": subtitle_tracks,
         }
+
+    def _stream_extraction_attempts(self) -> list[dict[str, Any]]:
+        formats = (
+            "bestvideo*+bestaudio/best",
+            "best[height>=1080][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]/best",
+            "best[acodec!=none][vcodec!=none]/best",
+            "best",
+            "b",
+        )
+        base = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "noplaylist": True,
+        }
+
+        attempts: list[dict[str, Any]] = []
+        # 1) Default yt-dlp client behavior (no forced client).
+        for fmt in formats:
+            attempt = dict(base)
+            attempt["format"] = fmt
+            attempts.append(attempt)
+
+        # 2) Explicit web/mobile client fallback.
+        for fmt in formats:
+            attempt = dict(base)
+            attempt["format"] = fmt
+            attempt["extractor_args"] = {"youtube": {"player_client": ["web", "ios", "android"]}}
+            attempts.append(attempt)
+
+        # 3) TV client last (can return DRM-only payloads on some videos).
+        for fmt in formats:
+            attempt = dict(base)
+            attempt["format"] = fmt
+            attempt["extractor_args"] = {"youtube": {"player_client": ["tv"]}}
+            attempts.append(attempt)
+
+        return attempts
 
     def _available_stream_options(self, playable_formats: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ranked = sorted(playable_formats, key=self._playback_format_rank, reverse=True)
@@ -1942,6 +2157,15 @@ class GoogleProvider(CompanionProvider):
         fps = int(float(fmt.get("fps") or 0))
         adaptive = 1 if self._is_adaptive_stream(fmt) else 0
         return (height, fps, tbr, adaptive)
+
+    def _published_epoch(self, published_at: str | None) -> int | None:
+        if not published_at:
+            return None
+        try:
+            published = datetime.fromisoformat(published_at.replace("Z", "+00:00")).astimezone(UTC)
+        except Exception:  # noqa: BLE001
+            return None
+        return int(published.timestamp())
 
     def _published_text(self, published_at: str | None) -> str:
         if not published_at:

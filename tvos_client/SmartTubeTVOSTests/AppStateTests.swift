@@ -124,4 +124,46 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.continueWatching.count, 1)
         XCTAssertEqual(state.continueWatching.first?.videoId, "v1")
     }
+
+    func testLaunchProfileGateAppearsOnBootstrapAndClosesAfterSelection() async {
+        var selectedAccountId = "acc_123"
+
+        URLProtocolMock.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            switch request.url?.path {
+            case "/v1/session":
+                let data = Data("{\"signedIn\":true,\"selectedAccountId\":\"\(selectedAccountId)\"}".utf8)
+                return (response, data)
+            case "/v1/accounts":
+                let data = Data(
+                    """
+                    {
+                      "selectedAccountId":"\(selectedAccountId)",
+                      "accounts":[
+                        {"id":"acc_123","name":"Preet","email":"preet@example.com","avatarUrl":null,"selected":\(selectedAccountId == "acc_123")},
+                        {"id":"acc_456","name":"Harnake","email":"harnake@example.com","avatarUrl":null,"selected":\(selectedAccountId == "acc_456")}
+                      ]
+                    }
+                    """.utf8
+                )
+                return (response, data)
+            case "/v1/accounts/select":
+                selectedAccountId = "acc_456"
+                return (response, Data("{\"selectedAccountId\":\"acc_456\"}".utf8))
+            default:
+                return (response, Data())
+            }
+        }
+
+        let api = APIClient(baseURL: URL(string: "http://localhost:8000")!, session: session)
+        let state = AppState(api: api, defaults: defaults)
+
+        await state.bootstrap()
+        XCTAssertTrue(state.hasBootstrapped)
+        XCTAssertTrue(state.launchProfileGateVisible)
+
+        await state.selectLaunchAccount("acc_456")
+        XCTAssertFalse(state.launchProfileGateVisible)
+        XCTAssertEqual(state.session.selectedAccountId, "acc_456")
+    }
 }

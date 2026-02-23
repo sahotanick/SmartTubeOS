@@ -16,9 +16,10 @@
 		4EAB0EBF7B98316CD4B43597 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D62F4B3F3E776801E432DD7 /* APIClientTests.swift */; };
 		5806FBCCC0AEE2DCF65BE73B /* SmartTubeTVOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61BD761D0E4A07C884DF8A5 /* SmartTubeTVOSApp.swift */; };
 		720D610996EAB30DB8AF6EA4 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04711018E0AC40913A9C77F8 /* SettingsScreen.swift */; };
-		A1A5F6CFD5D24AF79A0A3B01 /* VideoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A5F6CFD5D24AF79A0A3B02 /* VideoRowView.swift */; };
+		85978B60DD7628D73A63E0F9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C17037ED44291BDE83C6BC53 /* Assets.xcassets */; };
 		B3A21ECEFA35AFE704E73615 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E8653EFA5DFF7200C1E6C2D /* AppStateTests.swift */; };
 		C3C4F6694CF0C770B1C5974B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAECB39766C894D1A751474 /* Models.swift */; };
+		EDC88835CA2DC1263D7CBAED /* VideoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE30177D9C87670C9D386304 /* VideoRowView.swift */; };
 		EE2232AA460386E4F94BDA9C /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03CE4237A3893FC38F77C4E0 /* AppState.swift */; };
 		FB95BD19F429A950E24B9EFF /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 452793F588031C427DC04A54 /* APIClient.swift */; };
 /* End PBXBuildFile section */
@@ -44,12 +45,13 @@
 		452793F588031C427DC04A54 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		81A66CE3BE52828D63178442 /* SmartTubeTVOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SmartTubeTVOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A6DECB622A34DAEC2C39B849 /* URLProtocolMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolMock.swift; sourceTree = "<group>"; };
-		A1A5F6CFD5D24AF79A0A3B02 /* VideoRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRowView.swift; sourceTree = "<group>"; };
+		C17037ED44291BDE83C6BC53 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C61BD761D0E4A07C884DF8A5 /* SmartTubeTVOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartTubeTVOSApp.swift; sourceTree = "<group>"; };
 		D58F97335AB3AAC3BFE8EAA1 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		DFAECB39766C894D1A751474 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		FB640D7C26493154374062D6 /* FeedScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedScreen.swift; sourceTree = "<group>"; };
 		FB6D027C4A6FA960C966479A /* VideoDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDetailScreen.swift; sourceTree = "<group>"; };
+		FE30177D9C87670C9D386304 /* VideoRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRowView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -65,6 +67,7 @@
 		3DC535640163170B03478280 /* SmartTubeTVOS */ = {
 			isa = PBXGroup;
 			children = (
+				C17037ED44291BDE83C6BC53 /* Assets.xcassets */,
 				EC021B603C13C3478BBFEAB2 /* App */,
 				D2AEFBE0268269E3D5C1BCE4 /* Core */,
 				CD6293C7C5D55D06216D6B95 /* Features */,
@@ -100,7 +103,7 @@
 				10E05CC7679700E747D5DA2E /* SearchScreen.swift */,
 				04711018E0AC40913A9C77F8 /* SettingsScreen.swift */,
 				FB6D027C4A6FA960C966479A /* VideoDetailScreen.swift */,
-				A1A5F6CFD5D24AF79A0A3B02 /* VideoRowView.swift */,
+				FE30177D9C87670C9D386304 /* VideoRowView.swift */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -149,7 +152,7 @@
 			buildConfigurationList = 5791A3F3023BF82D6F989D3C /* Build configuration list for PBXNativeTarget "SmartTubeTVOS" */;
 			buildPhases = (
 				4C23C56CB88B1D37BDECF8A0 /* Sources */,
-				B0D4834F2DCC4C459AD7436A /* Inject Companion Auto Base URL */,
+				556E6181CF745CB2F5053B62 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -191,27 +194,16 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		B0D4834F2DCC4C459AD7436A /* Inject Companion Auto Base URL */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
+/* Begin PBXResourcesBuildPhase section */
+		556E6181CF745CB2F5053B62 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Inject Companion Auto Base URL";
-			outputFileListPaths = (
-			);
-			outputPaths = (
+				85978B60DD7628D73A63E0F9 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\n\nLAN_IP=\"\"\nfor iface in en0 en1 en2 bridge100; do\n  candidate=\"$(ipconfig getifaddr \"$iface\" 2>/dev/null || true)\"\n  if [ -n \"$candidate\" ]; then\n    LAN_IP=\"$candidate\"\n    break\n  fi\ndone\n\nif [ -z \"$LAN_IP\" ]; then\n  default_iface=\"$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')\"\n  if [ -n \"$default_iface\" ]; then\n    LAN_IP=\"$(ipconfig getifaddr \"$default_iface\" 2>/dev/null || true)\"\n  fi\nfi\n\nif [ -z \"$LAN_IP\" ]; then\n  echo \"warning: Could not detect LAN IP, skipping CompanionAutoBaseURL injection\"\n  exit 0\nfi\n\nPLIST=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nif [ ! -f \"$PLIST\" ]; then\n  echo \"warning: Info.plist not found at $PLIST\"\n  exit 0\nfi\n\n/usr/libexec/PlistBuddy -c \"Delete :CompanionAutoBaseURL\" \"$PLIST\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Add :CompanionAutoBaseURL string http://$LAN_IP:8000\" \"$PLIST\"\n\necho \"CompanionAutoBaseURL=http://$LAN_IP:8000\"\n";
 		};
-/* End PBXShellScriptBuildPhase section */
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4C23C56CB88B1D37BDECF8A0 /* Sources */ = {
@@ -228,7 +220,7 @@
 				720D610996EAB30DB8AF6EA4 /* SettingsScreen.swift in Sources */,
 				5806FBCCC0AEE2DCF65BE73B /* SmartTubeTVOSApp.swift in Sources */,
 				0EC57A2DDC6CED67B110AEBC /* VideoDetailScreen.swift in Sources */,
-				A1A5F6CFD5D24AF79A0A3B01 /* VideoRowView.swift in Sources */,
+				EDC88835CA2DC1263D7CBAED /* VideoRowView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

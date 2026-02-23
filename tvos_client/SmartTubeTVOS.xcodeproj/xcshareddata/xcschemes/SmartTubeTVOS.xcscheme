@@ -74,13 +74,6 @@
             ReferencedContainer = "container:SmartTubeTVOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "COMPANION_BASE_URL"
-            value = "http://192.168.1.62:8000"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
       <CommandLineArguments>
       </CommandLineArguments>
    </LaunchAction>

@@ -1,9 +1,16 @@
 import AVFoundation
 import AVKit
+import CoreMedia
 import SwiftUI
 
 struct VideoDetailScreen: View {
     let videoId: String
+    let queueContext: [VideoFeedItem]?
+
+    init(videoId: String, queueContext: [VideoFeedItem]? = nil) {
+        self.videoId = videoId
+        self.queueContext = queueContext
+    }
 
     @EnvironmentObject private var appState: AppState
     @AppStorage("autoplay_up_next_enabled") private var autoplayUpNextEnabled = true
@@ -71,7 +78,7 @@ struct VideoDetailScreen: View {
                             .bold()
                         ForEach(relatedItems.prefix(12)) { item in
                             NavigationLink {
-                                VideoDetailScreen(videoId: item.videoId)
+                                VideoDetailScreen(videoId: item.videoId, queueContext: relatedItems)
                             } label: {
                                 VideoRowView(item: item)
                             }
@@ -118,7 +125,7 @@ struct VideoDetailScreen: View {
         }
         .navigationTitle("Video")
         .navigationDestination(item: $autoNavigateRoute) { route in
-            VideoDetailScreen(videoId: route.id)
+            VideoDetailScreen(videoId: route.id, queueContext: queueContext)
         }
         .task {
             await loadData()
@@ -197,6 +204,35 @@ struct VideoDetailScreen: View {
     }
 
     private var playbackQueue: [PlaybackQueueItem] {
+        if let queueContext, !queueContext.isEmpty {
+            var queue: [PlaybackQueueItem] = []
+            for item in queueContext {
+                guard !queue.contains(where: { $0.videoId == item.videoId }) else { continue }
+                queue.append(
+                    PlaybackQueueItem(
+                        videoId: item.videoId,
+                        title: item.title,
+                        channelName: item.channelName,
+                        thumbnailUrl: item.thumbnailUrl
+                    )
+                )
+            }
+            if !queue.contains(where: { $0.videoId == videoId }) {
+                let primaryTitle = metadata?.title ?? "Video \(videoId)"
+                let primaryChannel = metadata?.channelName ?? ""
+                queue.insert(
+                    PlaybackQueueItem(
+                        videoId: videoId,
+                        title: primaryTitle,
+                        channelName: primaryChannel,
+                        thumbnailUrl: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg"
+                    ),
+                    at: 0
+                )
+            }
+            return queue
+        }
+
         var queue: [PlaybackQueueItem] = []
         let primaryTitle = metadata?.title ?? "Video \(videoId)"
         let primaryChannel = metadata?.channelName ?? ""
@@ -250,7 +286,6 @@ private struct PlaybackQueueItem: Identifiable, Hashable {
 struct ChannelVideosScreen: View {
     let channelId: String
     let channelName: String
-
     @EnvironmentObject private var appState: AppState
     @State private var items: [VideoFeedItem] = []
     @State private var continuationToken: String?
@@ -261,7 +296,7 @@ struct ChannelVideosScreen: View {
         VStack(alignment: .leading, spacing: 20) {
             List(items) { item in
                 NavigationLink {
-                    VideoDetailScreen(videoId: item.videoId)
+                    VideoDetailScreen(videoId: item.videoId, queueContext: items)
                 } label: {
                     VideoRowView(item: item)
                 }
@@ -328,7 +363,6 @@ private struct PlayerScreen: View {
     let autoplayEnabled: Bool
     let onAutoplayChange: (Bool) -> Void
     let onNavigateToVideo: (String) -> Void
-
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer
@@ -339,11 +373,15 @@ private struct PlayerScreen: View {
     @State private var availableStreams: [PlaybackStreamOption]
     @State private var subtitleTracks: [SubtitleTrack]
     @State private var selectedStreamID: String?
+    @State private var selectedSubtitleID: String?
+    @State private var resumePositionByVideoId: [String: Double] = [:]
     @State private var playbackRate = 1.0
     @State private var autoplay: Bool
     @State private var showSettings = false
     @State private var isLoadingNext = false
     @State private var playerError: String?
+    @State private var showOverlay = true
+    @State private var overlayHideTask: Task<Void, Never>?
 
     init(
         initialVideoId: String,
@@ -371,7 +409,9 @@ private struct PlayerScreen: View {
         _availableStreams = State(initialValue: initialPlayback.availableStreams ?? [])
         _subtitleTracks = State(initialValue: initialPlayback.subtitleTracks ?? [])
         _selectedStreamID = State(initialValue: initialPlayback.availableStreams?.first?.id)
+        _selectedSubtitleID = State(initialValue: nil)
         _autoplay = State(initialValue: autoplayEnabled)
+        _resumePositionByVideoId = State(initialValue: [:])
     }
 
     var body: some View {
@@ -379,68 +419,83 @@ private struct PlayerScreen: View {
             VideoPlayer(player: player)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(currentTitle)
-                            .font(.title3.bold())
-                            .lineLimit(2)
-                        if !currentChannelName.isEmpty {
-                            Text(currentChannelName)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+            if showOverlay {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(currentTitle)
+                                .font(.title3.bold())
+                                .lineLimit(2)
+                            if !currentChannelName.isEmpty {
+                                Text(currentChannelName)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let next = nextQueueItem {
+                                Text("Up next: \(next.title)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
-                        if let next = nextQueueItem {
-                            Text("Up next: \(next.title)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+
+                        Spacer()
+
+                        Button("Options") {
+                            showSettings = true
+                            revealOverlay()
+                        }
+                    }
+
+                    if isLoadingNext {
+                        ProgressView("Loading Up Next...")
+                            .padding(.top, 8)
+                    }
+
+                    if let playerError {
+                        Text(playerError)
+                            .foregroundStyle(.red)
+                            .font(.footnote)
+                    }
+
+                    if !autoplay, let next = nextQueueItem {
+                        Button("Play Next: \(next.title)") {
+                            Task { await playNext() }
+                            revealOverlay()
                         }
                     }
 
                     Spacer()
-
-                    Button("Options") {
-                        showSettings = true
-                    }
                 }
-
-                if isLoadingNext {
-                    ProgressView("Loading Up Next...")
-                        .padding(.top, 8)
-                }
-
-                if let playerError {
-                    Text(playerError)
-                        .foregroundStyle(.red)
-                        .font(.footnote)
-                }
-
-                if !autoplay, let next = nextQueueItem {
-                    Button("Play Next: \(next.title)") {
-                        Task { await playNext() }
-                    }
-                }
-
-                Spacer()
+                .padding(40)
+                .transition(.opacity)
             }
-            .padding(40)
         }
         .onAppear {
+            applyResumePosition(for: currentVideoId)
             player.play()
+            revealOverlay()
         }
         .onDisappear {
             saveWatchProgressSnapshot()
             player.pause()
+            overlayHideTask?.cancel()
             if currentVideoId != initialVideoId {
                 onNavigateToVideo(currentVideoId)
             }
         }
         .onPlayPauseCommand {
             togglePlayPause()
+            revealOverlay()
+        }
+        .onMoveCommand { _ in
+            revealOverlay()
         }
         .onExitCommand {
             dismiss()
+        }
+        .onTapGesture {
+            revealOverlay()
         }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { notification in
             guard let item = notification.object as? AVPlayerItem else { return }
@@ -456,6 +511,7 @@ private struct PlayerScreen: View {
                 availableStreams: availableStreams,
                 selectedStreamID: $selectedStreamID,
                 subtitleTracks: subtitleTracks,
+                selectedSubtitleID: $selectedSubtitleID,
                 playbackRate: playbackRate,
                 onSelectRate: { rate in
                     playbackRate = rate
@@ -469,6 +525,7 @@ private struct PlayerScreen: View {
             )
             .onDisappear {
                 onAutoplayChange(autoplay)
+                revealOverlay()
             }
         }
     }
@@ -511,15 +568,36 @@ private struct PlayerScreen: View {
             player.playImmediately(atRate: Float(playbackRate))
 
             currentVideoId = next.videoId
+            applyResumePosition(for: next.videoId)
             currentTitle = nextMetadata?.title ?? next.title
             currentChannelName = nextMetadata?.channelName ?? next.channelName
             currentThumbnailURL = next.thumbnailUrl
             availableStreams = nextPlayback.availableStreams ?? []
             subtitleTracks = nextPlayback.subtitleTracks ?? []
             selectedStreamID = availableStreams.first?.id
+            selectedSubtitleID = nil
             playerError = nil
+            showOverlay = true
+            overlayHideTask?.cancel()
+            overlayHideTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showOverlay = false
+                }
+            }
         } catch {
             playerError = error.localizedDescription
+        }
+    }
+
+    private func revealOverlay() {
+        showOverlay = true
+        overlayHideTask?.cancel()
+        overlayHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            withAnimation(.easeOut(duration: 0.2)) {
+                showOverlay = false
+            }
         }
     }
 
@@ -549,10 +627,20 @@ private struct PlayerScreen: View {
         }
     }
 
+    private func applyResumePosition(for videoId: String) {
+        let cached = resumePositionByVideoId[videoId] ?? 0
+        let persisted = appState.continueWatchingEntry(for: videoId)?.lastPositionSec ?? 0
+        let position = max(cached, persisted)
+        guard position > 5 else { return }
+        let time = CMTime(seconds: position, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
     private func saveWatchProgressSnapshot() {
         let position = player.currentTime().seconds
         let duration = player.currentItem?.duration.seconds ?? 0
         guard position.isFinite, duration.isFinite else { return }
+        resumePositionByVideoId[currentVideoId] = position
         appState.recordWatchProgress(
             videoId: currentVideoId,
             title: currentTitle,
@@ -571,6 +659,7 @@ private struct PlayerSettingsPanel: View {
     let availableStreams: [PlaybackStreamOption]
     @Binding var selectedStreamID: String?
     let subtitleTracks: [SubtitleTrack]
+    @Binding var selectedSubtitleID: String?
     let playbackRate: Double
     let onSelectRate: (Double) -> Void
     let onSelectStream: (PlaybackStreamOption) -> Void
@@ -580,15 +669,23 @@ private struct PlayerSettingsPanel: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Autoplay") {
-                    Button(autoplay ? "Turn Autoplay Off" : "Turn Autoplay On") {
+                Color.clear
+                    .frame(height: 10)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
+
+                settingsSection("Autoplay") {
+                    FocusableSettingsRowButton {
                         autoplay.toggle()
+                    } label: {
+                        Text(autoplay ? "Turn Autoplay Off" : "Turn Autoplay On")
+                            .font(.headline)
                     }
                 }
 
-                Section("Playback Speed") {
+                settingsSection("Playback Speed") {
                     ForEach(speedOptions, id: \.self) { speed in
-                        Button {
+                        FocusableSettingsRowButton {
                             onSelectRate(speed)
                         } label: {
                             HStack {
@@ -602,13 +699,16 @@ private struct PlayerSettingsPanel: View {
                     }
                 }
 
-                Section("Quality") {
+                settingsSection("Quality") {
                     if availableStreams.isEmpty {
                         Text("No alternate streams available")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                            .listRowBackground(Color.clear)
                     } else {
                         ForEach(availableStreams) { stream in
-                            Button {
+                            FocusableSettingsRowButton {
                                 onSelectStream(stream)
                                 selectedStreamID = stream.id
                             } label: {
@@ -620,27 +720,60 @@ private struct PlayerSettingsPanel: View {
                                     }
                                 }
                             }
+                            .listRowBackground(Color.clear)
                         }
                     }
                 }
 
-                Section("Captions") {
-                    if subtitleTracks.isEmpty {
-                        Text("No captions exposed for this stream")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(subtitleTracks) { track in
-                            HStack {
-                                Text(track.label)
-                                if track.isAutoGenerated {
-                                    Text("(Auto)")
-                                        .foregroundStyle(.secondary)
-                                }
+                settingsSection("Captions") {
+                    FocusableSettingsRowButton {
+                        selectedSubtitleID = nil
+                    } label: {
+                        HStack {
+                            Text("Off")
+                            Spacer()
+                            if selectedSubtitleID == nil {
+                                Image(systemName: "checkmark")
                             }
                         }
                     }
+                    .listRowBackground(Color.clear)
+
+                    if subtitleTracks.isEmpty {
+                        Text("No captions exposed for this stream")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(subtitleTracks) { track in
+                            FocusableSettingsRowButton {
+                                selectedSubtitleID = track.id
+                            } label: {
+                                HStack {
+                                    Text(track.label)
+                                    if track.isAutoGenerated {
+                                        Text("(Auto)")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if selectedSubtitleID == track.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                    }
                 }
+
+                Color.clear
+                    .frame(height: 14)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
             }
+            .listStyle(.plain)
+                        .background(Color.black.opacity(0.94).ignoresSafeArea())
             .navigationTitle("Playback Options")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -655,5 +788,49 @@ private struct PlayerSettingsPanel: View {
     private func streamLabel(_ stream: PlaybackStreamOption) -> String {
         let mode = stream.isAdaptive ? "adaptive" : "fixed"
         return "\(stream.qualityLabel) (\(mode))"
+    }
+
+    @ViewBuilder
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                content()
+            }
+        } header: {
+            Text(title)
+                .font(.title3.bold())
+                .foregroundStyle(.white.opacity(0.9))
+        }
+        .textCase(nil)
+        .listRowBackground(Color.clear)
+    }
+}
+
+private struct FocusableSettingsRowButton<Label: View>: View {
+    private let action: () -> Void
+    private let label: () -> Label
+
+    @Environment(\.isFocused) private var isFocused
+
+    init(action: @escaping () -> Void, @ViewBuilder label: @escaping () -> Label) {
+        self.action = action
+        self.label = label
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                label()
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isFocused ? Color.white.opacity(0.94) : Color.white.opacity(0.08))
+            )
+            .foregroundStyle(isFocused ? Color.black : Color.white)
+        }
+        .buttonStyle(.plain)
     }
 }

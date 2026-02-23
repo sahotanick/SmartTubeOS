@@ -30,6 +30,9 @@ class CompanionApp:
 
 def create_app(settings: Settings | None = None, state_store: StateStore | None = None) -> FastAPI:
     runtime = CompanionApp(settings=settings, state_store=state_store)
+    if runtime.settings.debug_formats:
+        import logging
+        logging.getLogger("smarttube").setLevel(logging.INFO)
     app = FastAPI(title="SmartTube tvOS Companion API", version="0.1.0")
 
     @app.exception_handler(ProviderError)

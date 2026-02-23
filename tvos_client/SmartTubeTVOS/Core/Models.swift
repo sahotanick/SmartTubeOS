@@ -94,6 +94,7 @@ struct VideoFeedItem: Codable, Identifiable {
     let channelId: String
     let thumbnailUrl: String
     let publishedText: String
+    let publishedAtEpochSec: Int?
     let durationSec: Int
 
     var id: String { videoId }
