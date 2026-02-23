@@ -70,3 +70,7 @@ tmp/
 fabric.properties
 *BAK.java
 hs_err_pid*.log
+
+# local API credential profiles
+.youtube_api_profiles.env
+.youtube_api_active.env
